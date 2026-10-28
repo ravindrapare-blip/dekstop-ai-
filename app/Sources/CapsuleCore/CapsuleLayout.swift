@@ -8,6 +8,8 @@ public struct CapsuleLayout: Equatable {
     public var showAcknowledge = false
     public var showConfirm = false
     public var showLastAction = false
+    public var showChoices = false
+    public var choiceCount = 0
 
     public static let width: Double = 440
     public static let verticalPadding: Double = 8
@@ -19,6 +21,13 @@ public struct CapsuleLayout: Equatable {
     public static let acknowledge: Double = 22
     public static let confirm: Double = 30
     public static let lastAction: Double = 16
+    public static let choiceRow: Double = 26
+    public static let choiceSpacing: Double = 4
+
+    /// The options plus a Cancel row.
+    public static func choices(count: Int) -> Double {
+        Double(count + 1) * choiceRow + Double(count) * choiceSpacing
+    }
 
     public init() {}
 
@@ -27,7 +36,9 @@ public struct CapsuleLayout: Equatable {
         showConfirm = state.pending != nil
         showAcknowledge = state.pending?.requiresAcknowledgment ?? false
         showChips = state.phase == .idle && inputIsEmpty && !showMessage
-        showLastAction = !state.lastAction.isEmpty && !showConfirm
+        showChoices = state.choice != nil
+        choiceCount = state.choice?.options.count ?? 0
+        showLastAction = !state.lastAction.isEmpty && !showConfirm && !showChoices
     }
 
     public var height: Double {
@@ -35,6 +46,7 @@ public struct CapsuleLayout: Equatable {
         if showMessage { rows.append(Self.message) }
         if showAcknowledge { rows.append(Self.acknowledge) }
         if showConfirm { rows.append(Self.confirm) }
+        if showChoices { rows.append(Self.choices(count: choiceCount)) }
         if showChips { rows.append(Self.chips) }
         if showLastAction { rows.append(Self.lastAction) }
         let gaps = Self.spacing * Double(rows.count - 1)

@@ -19,5 +19,6 @@
   },
   "note": "",
   "requires_confirmation": true,
+  "result": null,
   "tool": "close_app"
 }

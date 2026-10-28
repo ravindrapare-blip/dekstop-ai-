@@ -1,23 +1,24 @@
 {
   "args": {
-    "path_or_name": "~/.ssh"
+    "path_or_name": "/etc"
   },
   "attempts": 1,
   "fallback": false,
   "guard": {
     "args": {
-      "path_or_name": "~/.ssh"
+      "path_or_name": "/etc"
     },
     "authorized": false,
     "confirmation_id": "abc123def456",
-    "message": "This is a high-risk action (~/.ssh is a protected location) and is blocked by default: open folder (path_or_name: ~/.ssh). Please confirm explicitly to proceed.",
+    "message": "This is a high-risk action (/etc is a protected location) and is blocked by default: open folder (path_or_name: /etc). Please confirm explicitly to proceed.",
     "outcome": "confirm",
-    "reason": "~/.ssh is a protected location",
+    "reason": "/etc is a protected location",
     "requires_acknowledgment": true,
     "risk": "high",
     "tool": "open_folder"
   },
   "note": "",
   "requires_confirmation": false,
+  "result": null,
   "tool": "open_folder"
 }

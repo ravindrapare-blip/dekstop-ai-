@@ -40,9 +40,10 @@ final class BackendClientTests: XCTestCase {
     }
 
     func testConfirmRequestShape() async throws {
-        let transport = FakeTransport.serving(["/confirm": "confirm_allow"])
-        let decision = try await makeClient(transport).confirm(id: "abc123def456", approved: true, acknowledgeRisk: true)
-        XCTAssertTrue(decision.authorized)
+        let transport = FakeTransport.serving(["/confirm": "confirm_done"])
+        let response = try await makeClient(transport).confirm(id: "abc123def456", approved: true, acknowledgeRisk: true)
+        XCTAssertTrue(response.decision.authorized)
+        XCTAssertEqual(response.result?.message, "Asked Safari to quit.")
         let body = transport.body(of: try XCTUnwrap(transport.requests.first))
         XCTAssertEqual(body["confirmation_id"] as? String, "abc123def456")
         XCTAssertEqual(body["approved"] as? Bool, true)
@@ -149,5 +150,25 @@ final class BackendClientTests: XCTestCase {
         let down = try makeClient(FakeTransport { _ in throw URLError(.cannotConnectToHost) })
         let downError = await thrownError(try await down.speak(text: "hi"))
         XCTAssertEqual(downError as? BackendError, .unreachable)
+    }
+
+    // MARK: - choosing between matches
+
+    func testChooseSendsThePickAndReturnsTheOutcome() async throws {
+        let transport = FakeTransport.serving(["/choose": "choose_done"])
+        let response = try await makeClient(transport).choose(choiceId: "c0ffee123456", optionId: "2")
+        XCTAssertEqual(response.result?.status, .done)
+        XCTAssertEqual(response.decision?.outcome, .allow)
+        let request = try XCTUnwrap(transport.requests.first)
+        XCTAssertEqual(request.url?.absoluteString, "http://127.0.0.1:8765/choose")
+        let body = transport.body(of: request)
+        XCTAssertEqual(body["choice_id"] as? String, "c0ffee123456")
+        XCTAssertEqual(body["option_id"] as? String, "2")
+    }
+
+    func testCancellingSendsNoOption() async throws {
+        let transport = FakeTransport.serving(["/choose": "choose_expired"])
+        _ = try await makeClient(transport).choose(choiceId: "c0ffee123456", optionId: nil)
+        XCTAssertNil(transport.body(of: try XCTUnwrap(transport.requests.first))["option_id"])
     }
 }

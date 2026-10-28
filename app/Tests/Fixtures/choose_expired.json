@@ -1,0 +1,16 @@
+{
+  "args": {},
+  "attempts": 0,
+  "fallback": false,
+  "guard": null,
+  "note": "",
+  "requires_confirmation": false,
+  "result": {
+    "choice": null,
+    "items": [],
+    "message": "That choice has expired. Please ask again.",
+    "status": "failed",
+    "via": ""
+  },
+  "tool": ""
+}

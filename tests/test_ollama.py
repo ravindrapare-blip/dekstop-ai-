@@ -8,6 +8,7 @@ from backend.config import ROOT
 from backend.llm import ModelNotFound, OllamaClient, OllamaError, OllamaUnavailable
 from backend.main import create_app
 from backend.startup import all_ok, model_installed, run_checks
+from fakes import quick_actions
 from safety import GuardrailManager, Policy
 
 POLICY = Policy.load(ROOT / "safety" / "policy.yaml")
@@ -136,12 +137,12 @@ def test_missing_binary_is_fatal_only_if_the_server_is_also_down():
 # ---- HTTP API ----------------------------------------------------------------
 
 def api(handler):
-    return TestClient(create_app(CFG, make_client(handler), guard=GuardrailManager(POLICY)))
+    return TestClient(create_app(CFG, make_client(handler), guard=GuardrailManager(POLICY), actions=quick_actions()))
 
 
 def test_api_health_status_tools():
     with api(ollama()) as c:
-        assert c.get("/health").json() == {"status": "ok", "phase": 4}
+        assert c.get("/health").json() == {"status": "ok", "phase": 5}
         status = c.get("/status").json()
         assert status["ready"] is True and status["model"] == "qwen2.5:3b"
         tools = c.get("/tools").json()

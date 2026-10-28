@@ -102,7 +102,63 @@ public struct GuardDecision: Codable, Equatable {
     }
 }
 
-/// The response of POST /route.
+/// One of several matches the user is asked to choose between.
+public struct ChoiceOption: Codable, Equatable, Identifiable {
+    public let id: String
+    public let label: String
+    public let detail: String
+
+    public init(id: String, label: String, detail: String = "") {
+        self.id = id
+        self.label = label
+        self.detail = detail
+    }
+}
+
+/// "I found 2 files that could match ... Which one?"
+public struct ChoicePrompt: Codable, Equatable {
+    public let choiceId: String
+    public let prompt: String
+    public let options: [ChoiceOption]
+
+    enum CodingKeys: String, CodingKey {
+        case choiceId = "choice_id"
+        case prompt, options
+    }
+
+    public init(choiceId: String, prompt: String, options: [ChoiceOption]) {
+        self.choiceId = choiceId
+        self.prompt = prompt
+        self.options = options
+    }
+}
+
+public enum ResultStatus: String, Codable, Equatable {
+    case done
+    case failed
+    case choose
+    case notAvailable = "not_available"
+}
+
+/// What the backend did (or could not do) after the safety layer allowed it.
+public struct ExecutionResult: Codable, Equatable {
+    public let status: ResultStatus
+    public let message: String
+    public let items: [String]
+    public let choice: ChoicePrompt?
+    public let via: String
+
+    public init(status: ResultStatus, message: String, items: [String] = [], choice: ChoicePrompt? = nil, via: String = "") {
+        self.status = status
+        self.message = message
+        self.items = items
+        self.choice = choice
+        self.via = via
+    }
+}
+
+/// The response of POST /route and POST /choose.
+/// `decision` is nil when nothing was judged yet: a question ("which one?") or a "not found".
 public struct RouteResponse: Codable, Equatable {
     public let tool: String
     public let args: [String: JSONValue]
@@ -110,17 +166,19 @@ public struct RouteResponse: Codable, Equatable {
     public let fallback: Bool
     public let note: String
     public let attempts: Int
-    public let decision: GuardDecision
+    public let decision: GuardDecision?
+    public let result: ExecutionResult?
 
     enum CodingKeys: String, CodingKey {
-        case tool, args, fallback, note, attempts
+        case tool, args, fallback, note, attempts, result
         case requiresConfirmation = "requires_confirmation"
         case decision = "guard"
     }
 
     public init(
         tool: String, args: [String: JSONValue] = [:], requiresConfirmation: Bool = false,
-        fallback: Bool = false, note: String = "", attempts: Int = 1, decision: GuardDecision
+        fallback: Bool = false, note: String = "", attempts: Int = 1,
+        decision: GuardDecision? = nil, result: ExecutionResult? = nil
     ) {
         self.tool = tool
         self.args = args
@@ -129,5 +187,27 @@ public struct RouteResponse: Codable, Equatable {
         self.note = note
         self.attempts = attempts
         self.decision = decision
+        self.result = result
+    }
+}
+
+/// The response of POST /confirm: the decision, with the result added at the same level.
+public struct ConfirmResponse: Decodable, Equatable {
+    public let decision: GuardDecision
+    public let result: ExecutionResult?
+
+    private enum ResultKey: String, CodingKey {
+        case result
+    }
+
+    public init(decision: GuardDecision, result: ExecutionResult? = nil) {
+        self.decision = decision
+        self.result = result
+    }
+
+    public init(from decoder: Decoder) throws {
+        decision = try GuardDecision(from: decoder)
+        let container = try decoder.container(keyedBy: ResultKey.self)
+        result = try container.decodeIfPresent(ExecutionResult.self, forKey: .result)
     }
 }

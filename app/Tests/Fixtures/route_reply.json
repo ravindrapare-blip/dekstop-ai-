@@ -19,5 +19,6 @@
   },
   "note": "",
   "requires_confirmation": false,
+  "result": null,
   "tool": "reply"
 }

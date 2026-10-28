@@ -1,0 +1,18 @@
+{
+  "args": {
+    "app_name": "Photoshop"
+  },
+  "attempts": 1,
+  "fallback": false,
+  "guard": null,
+  "note": "",
+  "requires_confirmation": false,
+  "result": {
+    "choice": null,
+    "items": [],
+    "message": "I couldn't find an app called \u201cPhotoshop\u201d.",
+    "status": "failed",
+    "via": ""
+  },
+  "tool": "open_app"
+}

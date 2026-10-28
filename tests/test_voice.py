@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 from backend.config import ROOT
 from backend.llm import OllamaClient
 from backend.main import create_app
+from fakes import quick_actions
 from safety import GuardrailManager, Policy
 from voice import VoiceError, VoiceService, voice_service_from_config
 from voice.audio import MAX_AUDIO_BYTES, is_playable_wav, wav_duration
@@ -357,7 +358,7 @@ POLICY = Policy.load(ROOT / "safety" / "policy.yaml")
 def api(voice):
     llm = OllamaClient("http://127.0.0.1:11434", "m", transport=httpx.MockTransport(lambda r: httpx.Response(200, json={})))
     cfg = {"ollama": {}, "router": {"max_retries": 0}}
-    return TestClient(create_app(cfg, llm, guard=GuardrailManager(POLICY), voice=voice))
+    return TestClient(create_app(cfg, llm, guard=GuardrailManager(POLICY), voice=voice, actions=quick_actions()))
 
 
 def ok_service(text="open chrome"):

@@ -9,7 +9,7 @@ A lightweight, local-first desktop assistant for a **2017 MacBook Air running ma
 - **SQLite** for reminders and memory.
 - A safety gate in front of every action.
 
-**Status: phase 4.** The backend asks a local Ollama model to choose one tool, validates it, and passes it through a safety layer (risk levels, confirmation, dry-run, audit log). A native floating capsule UI (`app/`) shows it, and you can speak to it and hear replies, all locally (`docs/voice.md`). Nothing is executed yet. See `docs/phases.md`, `docs/tools.md`, `safety/README.md` and `app/README.md`.
+**Status: phase 5.** The backend asks a local Ollama model to choose one tool, validates it, and passes it through a safety layer (risk levels, confirmation, dry-run, audit log). A native floating capsule UI (`app/`) shows it, and you can speak to it and hear replies, all locally (`docs/voice.md`). It can open, focus and quit apps and open and search files (`docs/actions.md`). Reminders, notes and browser actions are not built yet. See `docs/phases.md`, `docs/tools.md`, `safety/README.md` and `app/README.md`.
 
 ## Layout
 
@@ -21,7 +21,7 @@ A lightweight, local-first desktop assistant for a **2017 MacBook Air running ma
 ├── backend/           orchestrator and API
 ├── browser/           puppeteer-core worker
 ├── voice/             speech engines: whisper.cpp, Piper, macOS voice
-├── automation/        Hammerspoon config and client
+├── automation/        opening apps and files: finder, Hammerspoon client and Lua
 ├── safety/            risk tiers, policy, approvals, audit
 ├── data/              SQLite, schema, logs (git-ignored)
 ├── docs/              architecture, install guide, phases
@@ -42,6 +42,7 @@ curl http://127.0.0.1:8765/health
 
 - `docs/architecture.md` : components, request flow, safety model, resource budget, compatibility findings
 - `docs/tools.md` : tool registry, JSON format, validation
+- `docs/actions.md` : apps and files: how names are matched, where it looks, Hammerspoon setup
 - `docs/voice.md` : voice setup, microphone permission, privacy
 - `docs/install.md` : setup for Monterey
 - `docs/phases.md` : roadmap

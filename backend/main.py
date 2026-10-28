@@ -1,4 +1,4 @@
-"""Backend entry point: health, status checks, tool list and the /route endpoint."""
+"""Backend entry point: health, status checks, tool list, /route, /confirm, /choose and the voice endpoints."""
 import logging
 from contextlib import asynccontextmanager
 
@@ -10,6 +10,9 @@ from pydantic import BaseModel, Field
 
 from backend.config import ROOT, load_config
 from backend.llm import ModelNotFound, OllamaClient, OllamaError, OllamaUnavailable, client_from_config
+from automation import ActionService, build_actions
+from automation.token import ensure_token
+from backend.pipeline import Outcome, Pipeline
 from backend.router import MAX_INPUT_CHARS, Router
 from backend.startup import all_ok, run_checks
 from backend.tool_defs import build_registry
@@ -17,7 +20,7 @@ from safety import AuditLog, GuardrailManager, Policy
 from voice import VoiceError, VoiceService, voice_service_from_config
 from voice.audio import MAX_AUDIO_BYTES
 
-PHASE = 4
+PHASE = 5
 
 # How each speech problem is reported over HTTP.
 VOICE_STATUS = {
@@ -36,6 +39,12 @@ class RouteRequest(BaseModel):
 
 class SpeakRequest(BaseModel):
     text: str = Field(min_length=1, max_length=2000)
+
+
+class ChooseRequest(BaseModel):
+    choice_id: str = Field(min_length=1, max_length=64)
+    option_id: str | None = Field(default=None, max_length=16)   # None cancels
+    dry_run: bool | None = None
 
 
 class ConfirmRequest(BaseModel):
@@ -77,11 +86,15 @@ def create_app(
     llm: OllamaClient | None = None,
     guard: GuardrailManager | None = None,
     voice: VoiceService | None = None,
+    actions: ActionService | None = None,
 ) -> FastAPI:
     cfg = cfg or load_config()
     llm = llm or client_from_config(cfg)
     guard = guard or build_guard(cfg)
     voice = voice or voice_service_from_config(cfg, ROOT)
+    actions = actions or build_actions(cfg, ROOT)
+    pipeline = Pipeline(guard, actions)
+    token_file = ROOT / cfg.get("automation", {}).get("token_file", "data/.token") if "automation" in cfg else None
     registry = build_registry()
     unruled = sorted(t.name for t in registry.all() if t.name not in guard.policy.rules)
     if unruled:
@@ -90,6 +103,11 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
+        if token_file is not None:
+            try:
+                ensure_token(token_file)    # shared with Hammerspoon; created once, readable by this user only
+            except OSError:
+                log.exception("could not create %s", token_file)
         try:
             for r in run_checks(llm):
                 (log.info if r.ok else log.warning)("startup check %s: %s %s", r.name, r.detail, r.fix)
@@ -113,30 +131,49 @@ def create_app(
     def tools() -> list[dict]:
         return [t.to_dict() for t in registry.all()]
 
+    def envelope(outcome: Outcome, *, fallback: bool = False, note: str = "", attempts: int = 0, shown_args=None) -> dict:
+        """The answer shape the app understands: the call, the safety decision (if one was made) and the result."""
+        return {
+            "tool": outcome.tool,
+            "args": outcome.args if shown_args is None else shown_args,
+            "requires_confirmation": outcome.requires_confirmation,
+            "fallback": fallback,
+            "note": note,
+            "attempts": attempts,
+            "guard": outcome.decision.to_dict() if outcome.decision else None,
+            "result": outcome.result.to_dict() if outcome.result else None,
+        }
+
     @app.post("/route")
     def route(req: RouteRequest) -> dict:
         try:
-            result = router.route(req.text)
+            routed = router.route(req.text)
         except ModelNotFound as e:
             raise HTTPException(503, f"model not available: {e}") from e
         except OllamaUnavailable as e:
             raise HTTPException(503, str(e)) from e
         except OllamaError as e:
             raise HTTPException(502, str(e)) from e
-        decision = guard.evaluate(result.call, dry_run=req.dry_run)
-        return {
-            **result.call.to_dict(),
-            "fallback": result.fallback,
-            "note": result.note,
-            "attempts": result.attempts,
-            "guard": decision.to_dict(),
-        }
+        call = routed.call
+        outcome = pipeline.run(call.tool, call.args, call.requires_confirmation, req.dry_run)
+        return envelope(
+            outcome, fallback=routed.fallback, note=routed.note, attempts=routed.attempts,
+            shown_args=call.args,    # what the model proposed; the judged (resolved) call is in "guard"
+        )
 
     @app.post("/confirm")
     def confirm(req: ConfirmRequest) -> dict:
-        return guard.confirm(
-            req.confirmation_id, req.approved, acknowledge_risk=req.acknowledge_risk
-        ).to_dict()
+        decision = guard.confirm(req.confirmation_id, req.approved, acknowledge_risk=req.acknowledge_risk)
+        result = pipeline.after_confirmation(decision)
+        return decision.to_dict() | {"result": result.to_dict() if result else None}
+
+    @app.post("/choose")
+    def choose(req: ChooseRequest) -> dict:
+        return envelope(pipeline.choose(req.choice_id, req.option_id, req.dry_run))
+
+    @app.get("/automation/status")
+    def automation_status() -> dict:
+        return actions.status()
 
     # Speech. The app records the microphone (it owns the permission) and plays the replies;
     # these endpoints only convert. A transcript still goes through /route and the safety layer.

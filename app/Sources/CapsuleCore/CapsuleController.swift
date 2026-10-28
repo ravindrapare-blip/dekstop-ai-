@@ -4,7 +4,8 @@ import Foundation
 /// It has no UI code. The window observes `onChange` and sends user actions to these methods.
 ///
 /// A spoken request follows the same path as a typed one, so the safety layer sees both the same way:
-///   mic -> recording -> transcript -> /route -> safety decision -> (confirm) -> run -> spoken reply
+///   mic -> recording -> transcript -> /route -> safety decision -> (confirm / choose) -> result -> spoken reply
+/// The backend runs actions itself, only after the safety layer allowed them; this class just shows the outcome.
 @MainActor
 public final class CapsuleController {
     public static let maxInputLength = 1000   // the backend rejects longer text
@@ -21,7 +22,6 @@ public final class CapsuleController {
     private let client: BackendClient
     private let voice: VoiceInput
     private let speech: SpeechOutput
-    private let runner: ActionRunner
     private let speakMode: SpeakMode
     private var task: Task<Void, Never>?
     private var requestID = 0              // answers to older requests are ignored
@@ -31,13 +31,11 @@ public final class CapsuleController {
     public init(
         client: BackendClient,
         voice: VoiceInput,
-        runner: ActionRunner,
         speech: SpeechOutput = UnavailableSpeech(),
         speakMode: SpeakMode = .voiceOnly
     ) {
         self.client = client
         self.voice = voice
-        self.runner = runner
         self.speech = speech
         self.speakMode = speakMode
     }
@@ -63,10 +61,30 @@ public final class CapsuleController {
             apply(.finished(message: "Cancelled. I didn't do it.", tone: .neutral, lastAction: "cancelled"))
             return
         }
-        apply(.started)
+        apply(.executing(pending.actionLabel))      // the backend is carrying out the approved action
         task = Task { [weak self] in
             await self?.finishConfirmation(pending, acknowledgeRisk: acknowledgeRisk, id: id)
         }
+    }
+
+    /// The user picked one of several matches.
+    public func choose(optionId: String) {
+        guard state.phase == .waiting, let choice = state.choice,
+              let option = choice.options.first(where: { $0.id == optionId }) else { return }
+        requestID += 1
+        let id = requestID
+        apply(.executing(option.label))
+        task = Task { [weak self] in
+            await self?.finishChoice(choice, optionId: optionId, id: id)
+        }
+    }
+
+    /// The user does not want any of the matches. Cancelling does not wait for the backend.
+    public func cancelChoice() {
+        guard state.phase == .waiting, let choice = state.choice else { return }
+        requestID += 1
+        discard(choice)
+        apply(.finished(message: "Cancelled.", tone: .neutral, lastAction: "cancelled"))
     }
 
     /// Stops waiting for the model. The backend may still finish, but its answer is ignored.
@@ -161,6 +179,7 @@ public final class CapsuleController {
         if !spoken && phase == .listening { voice.cancel() }
         stopSpeaking()
         if let pending = state.pending { discard(pending) }
+        if let choice = state.choice { discard(choice) }
         lastRequestWasSpoken = spoken
         apply(.started)
         requestID += 1
@@ -189,7 +208,20 @@ public final class CapsuleController {
         do {
             let response = try await client.route(text: text)
             guard id == requestID else { return }
-            await perform(plan(response), id: id)
+            perform(plan(response))
+        } catch is CancellationError {
+            // cancel() already updated the state
+        } catch {
+            guard id == requestID else { return }
+            apply(.failed(Self.describe(error)))
+        }
+    }
+
+    private func finishChoice(_ choice: ChoicePrompt, optionId: String, id: Int) async {
+        do {
+            let response = try await client.choose(choiceId: choice.choiceId, optionId: optionId)
+            guard id == requestID else { return }
+            perform(plan(response))
         } catch is CancellationError {
             // cancel() already updated the state
         } catch {
@@ -200,9 +232,9 @@ public final class CapsuleController {
 
     private func finishConfirmation(_ pending: PendingConfirmation, acknowledgeRisk: Bool, id: Int) async {
         do {
-            let decision = try await client.confirm(id: pending.id, approved: true, acknowledgeRisk: acknowledgeRisk)
+            let response = try await client.confirm(id: pending.id, approved: true, acknowledgeRisk: acknowledgeRisk)
             guard id == requestID else { return }
-            await perform(plan(decision), id: id)
+            perform(plan(response))
         } catch is CancellationError {
             // cancel() already updated the state
         } catch {
@@ -211,22 +243,14 @@ public final class CapsuleController {
         }
     }
 
-    private func perform(_ step: Step, id: Int) async {
+    private func perform(_ step: Step) {
         switch step {
         case .reply(let text):
             finish(text, tone: .neutral, lastAction: "reply")
-        case .run(let action):
-            apply(.executing(action.summary))
-            let result = await runner.run(action)
-            guard id == requestID else { return }
-            switch result {
-            case .completed(let text):
-                finish(text, tone: .success, lastAction: action.summary)
-            case .notAvailable(let text):
-                finish(text, tone: .warning, lastAction: "\(action.summary) (not run)")
-            case .failed(let text):
-                finish(text, tone: .error, lastAction: "\(action.summary) (failed)")
-            }
+        case .report(let message, let tone, let lastAction):
+            finish(message, tone: tone, lastAction: lastAction)
+        case .choose(let choice):
+            apply(.choosing(choice))    // answered with the buttons, so it is not read aloud
         case .ask(let pending):
             apply(.waiting(pending))    // answered with the buttons, so it is not read aloud
         case .refuse(let text):
@@ -241,6 +265,11 @@ public final class CapsuleController {
     private func discard(_ pending: PendingConfirmation) {
         let client = self.client
         Task { _ = try? await client.confirm(id: pending.id, approved: false, acknowledgeRisk: false) }
+    }
+
+    private func discard(_ choice: ChoicePrompt) {
+        let client = self.client
+        Task { _ = try? await client.choose(choiceId: choice.choiceId, optionId: nil) }
     }
 
     // MARK: - State and speech

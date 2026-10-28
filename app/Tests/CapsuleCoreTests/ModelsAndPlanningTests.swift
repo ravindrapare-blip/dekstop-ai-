@@ -2,13 +2,18 @@ import XCTest
 @testable import CapsuleCore
 
 final class ModelsAndPlanningTests: XCTestCase {
+    private let routeFixtures = [
+        "route_allow_open_app", "route_reply", "route_confirm_close_app", "route_confirm_high_risk", "route_block_url",
+        "route_dry_run", "route_fallback", "route_not_found", "route_not_available", "route_search",
+        "route_open_file", "route_choose_file", "choose_done", "choose_expired",
+    ]
+
     func testEveryBackendFixtureDecodes() throws {
-        for name in ["route_allow_open_app", "route_reply", "route_confirm_close_app", "route_confirm_high_risk",
-                     "route_block_url", "route_dry_run", "route_fallback"] {
+        for name in routeFixtures {
             XCTAssertNoThrow(try Fixtures.route(name), name)
         }
-        for name in ["confirm_allow", "confirm_expired"] {
-            XCTAssertNoThrow(try Fixtures.decision(name), name)
+        for name in ["confirm_done", "confirm_expired"] {
+            XCTAssertNoThrow(try Fixtures.confirm(name), name)
         }
     }
 
@@ -18,14 +23,35 @@ final class ModelsAndPlanningTests: XCTestCase {
         XCTAssertEqual(r.args["app_name"], .string("Google Chrome"))
         XCTAssertFalse(r.requiresConfirmation)
         XCTAssertFalse(r.fallback)
-        XCTAssertEqual(r.decision.outcome, .allow)
-        XCTAssertTrue(r.decision.authorized)
-        XCTAssertNil(r.decision.confirmationId)
+        XCTAssertEqual(r.decision?.outcome, .allow)
+        XCTAssertEqual(r.decision?.authorized, true)
+        XCTAssertNil(r.decision?.confirmationId)
+        XCTAssertEqual(r.result?.status, .done)
+        XCTAssertEqual(r.result?.message, "Opened Google Chrome.")
     }
 
-    func testUnknownOutcomeDoesNotDecode() {
-        let json = #"{"outcome":"maybe","authorized":true,"risk":"low","reason":"","message":"","tool":"x","args":{},"confirmation_id":null,"requires_acknowledgment":false}"#
-        XCTAssertThrowsError(try JSONDecoder().decode(GuardDecision.self, from: Data(json.utf8)))
+    func testAQuestionHasNoDecisionYet() throws {
+        let r = try Fixtures.route("route_choose_file")
+        XCTAssertNil(r.decision)
+        XCTAssertEqual(r.result?.status, .choose)
+        XCTAssertEqual(r.result?.choice?.choiceId, "c0ffee123456")
+        XCTAssertEqual(r.result?.choice?.options.map { $0.label }, ["report.pdf", "report.pdf"])
+        XCTAssertEqual(Set(r.result?.choice?.options.map { $0.detail } ?? []), ["~/Documents", "~/Downloads"])
+    }
+
+    func testConfirmResponseCarriesTheDecisionAndTheResult() throws {
+        let r = try Fixtures.confirm("confirm_done")
+        XCTAssertTrue(r.decision.authorized)
+        XCTAssertEqual(r.decision.tool, "close_app")
+        XCTAssertEqual(r.result?.status, .done)
+        XCTAssertNil(try Fixtures.confirm("confirm_expired").result)
+    }
+
+    func testUnknownValuesDoNotDecode() {
+        let outcome = #"{"outcome":"maybe","authorized":true,"risk":"low","reason":"","message":"","tool":"x","args":{},"confirmation_id":null,"requires_acknowledgment":false}"#
+        XCTAssertThrowsError(try JSONDecoder().decode(GuardDecision.self, from: Data(outcome.utf8)))
+        let status = #"{"status":"exploded","message":"","items":[],"choice":null,"via":""}"#
+        XCTAssertThrowsError(try JSONDecoder().decode(ExecutionResult.self, from: Data(status.utf8)))
     }
 
     func testJSONValueDecoding() throws {
@@ -42,21 +68,55 @@ final class ModelsAndPlanningTests: XCTestCase {
         XCTAssertNil(v["c"]?.numberValue)
     }
 
-    // MARK: - plan
+    // MARK: - plan: what the backend says becomes one step
 
-    func testAuthorizedActionIsRun() throws {
-        guard case .run(let action) = plan(try Fixtures.route("route_allow_open_app")) else { return XCTFail("expected run") }
-        XCTAssertEqual(action.tool, "open_app")
-        XCTAssertEqual(action.summary, "open app (Google Chrome)")
+    func testAnActionTheBackendDidIsReportedWithItsLabel() throws {
+        XCTAssertEqual(
+            plan(try Fixtures.route("route_allow_open_app")),
+            .report(message: "Opened Google Chrome.", tone: .success, lastAction: "open app (Google Chrome)")
+        )
+    }
+
+    func testTheLabelNamesTheRealTargetNotTheWords() throws {
+        guard case .report(_, _, let label) = plan(try Fixtures.route("choose_done")) else { return XCTFail("expected a report") }
+        XCTAssertEqual(label, "open file (/Users/me/Documents/report.pdf)")
+    }
+
+    func testSearchResultsAreReported() throws {
+        guard case .report(let message, let tone, _) = plan(try Fixtures.route("route_search")) else { return XCTFail("expected a report") }
+        XCTAssertEqual(message, "Found 2: budget.pdf, budget old.pdf")
+        XCTAssertEqual(tone, .success)
+    }
+
+    func testNotFoundIsAWarningWithoutADecision() throws {
+        let r = try Fixtures.route("route_not_found")
+        XCTAssertNil(r.decision)
+        guard case .report(let message, let tone, let label) = plan(r) else { return XCTFail("expected a report") }
+        XCTAssertTrue(message.contains("Photoshop"))
+        XCTAssertEqual(tone, .warning)
+        XCTAssertEqual(label, "open app (Photoshop) (failed)")
+    }
+
+    func testAnUnbuiltToolIsNeverPresentedAsDone() throws {
+        guard case .report(_, let tone, let label) = plan(try Fixtures.route("route_not_available")) else { return XCTFail("expected a report") }
+        XCTAssertEqual(tone, .warning)
+        XCTAssertTrue(label?.hasSuffix("(not run)") ?? false)
     }
 
     func testReplyShowsItsText() throws {
         XCTAssertEqual(plan(try Fixtures.route("route_reply")), .reply("Hello there."))
+        guard case .reply = plan(try Fixtures.route("route_fallback")) else { return XCTFail("expected reply") }
     }
 
     func testReplyWithoutTextStillSaysSomething() {
         let d = GuardDecision(outcome: .allow, authorized: true, tool: "reply", args: [:])
         XCTAssertEqual(plan(d), .reply("Done."))
+    }
+
+    func testSeveralMatchesBecomeAQuestion() throws {
+        guard case .choose(let choice) = plan(try Fixtures.route("route_choose_file")) else { return XCTFail("expected choose") }
+        XCTAssertEqual(choice.options.count, 2)
+        XCTAssertTrue(choice.prompt.hasSuffix("Which one?"))
     }
 
     func testConfirmationIsAsked() throws {
@@ -82,22 +142,58 @@ final class ModelsAndPlanningTests: XCTestCase {
         XCTAssertTrue(text.hasPrefix("Dry run:"))
     }
 
-    func testFallbackReplyIsJustAReply() throws {
-        guard case .reply = plan(try Fixtures.route("route_fallback")) else { return XCTFail("expected reply") }
-    }
-
-    func testApprovedConfirmationIsRun() throws {
-        guard case .run(let action) = plan(try Fixtures.decision("confirm_allow")) else { return XCTFail("expected run") }
-        XCTAssertEqual(action.tool, "close_app")
-        XCTAssertEqual(action.args["app_name"], .string("Safari"))
+    func testApprovedConfirmationIsReported() throws {
+        XCTAssertEqual(
+            plan(try Fixtures.confirm("confirm_done")),
+            .report(message: "Asked Safari to quit.", tone: .success, lastAction: "close app (Safari)")
+        )
     }
 
     func testExpiredConfirmationIsRefused() throws {
-        guard case .refuse = plan(try Fixtures.decision("confirm_expired")) else { return XCTFail("expected refuse") }
+        guard case .refuse = plan(try Fixtures.confirm("confirm_expired")) else { return XCTFail("expected refuse") }
     }
 
-    func testInconsistentDecisionsAreNeverRun() {
-        // "allow" that is not authorized, "block" that is authorized, "confirm" with no id.
+    func testAnExpiredChoiceIsReportedWithoutALabelOfItsOwn() throws {
+        guard case .report(let message, _, let label) = plan(try Fixtures.route("choose_expired")) else { return XCTFail("expected a report") }
+        XCTAssertTrue(message.contains("expired"))
+        XCTAssertNil(label)
+    }
+
+    // MARK: - plan: answers that contradict themselves are never trusted
+
+    private func result(_ status: ResultStatus, choice: ChoicePrompt? = nil) -> ExecutionResult {
+        ExecutionResult(status: status, message: "msg", choice: choice)
+    }
+
+    func testAResultNeedsAnAuthorizingDecision() {
+        let blocked = GuardDecision(outcome: .block, authorized: false, tool: "close_app")
+        let confirm = GuardDecision(outcome: .confirm, authorized: false, tool: "close_app", confirmationId: "x")
+        let dry = GuardDecision(outcome: .dryRun, authorized: false, tool: "close_app")
+        for decision in [blocked, confirm, dry] {
+            for status in [ResultStatus.done, .notAvailable, .failed] {
+                guard case .invalid = plan(decision: decision, result: result(status), fallbackLabel: "") else {
+                    return XCTFail("\(status) beside \(decision.outcome) must not be shown")
+                }
+            }
+        }
+        for status in [ResultStatus.done, .notAvailable] {
+            guard case .invalid = plan(decision: nil, result: result(status), fallbackLabel: "x") else {
+                return XCTFail("\(status) with no decision at all must not be shown")
+            }
+        }
+    }
+
+    func testAQuestionMustHaveOptionsAndNoDecision() {
+        let allowed = GuardDecision(outcome: .allow, authorized: true, tool: "open_file")
+        let choice = ChoicePrompt(choiceId: "c", prompt: "Which?", options: [ChoiceOption(id: "1", label: "a")])
+        let empty = ChoicePrompt(choiceId: "c", prompt: "Which?", options: [])
+        guard case .invalid = plan(decision: allowed, result: result(.choose, choice: choice), fallbackLabel: "") else { return XCTFail("a question beside a decision") }
+        guard case .invalid = plan(decision: nil, result: result(.choose, choice: empty), fallbackLabel: "") else { return XCTFail("a question with no options") }
+        guard case .invalid = plan(decision: nil, result: result(.choose), fallbackLabel: "") else { return XCTFail("a question with no choice") }
+        guard case .choose = plan(decision: nil, result: result(.choose, choice: choice), fallbackLabel: "") else { return XCTFail("a good question") }
+    }
+
+    func testInconsistentDecisionsAreNeverTrusted() {
         let cases = [
             GuardDecision(outcome: .allow, authorized: false, tool: "open_app"),
             GuardDecision(outcome: .block, authorized: true, tool: "open_app"),
@@ -109,6 +205,12 @@ final class ModelsAndPlanningTests: XCTestCase {
         for decision in cases {
             guard case .invalid = plan(decision) else { return XCTFail("expected invalid for \(decision)") }
         }
+    }
+
+    func testAnAllowedActionWithoutAResultIsInvalid() {
+        let allowed = GuardDecision(outcome: .allow, authorized: true, tool: "open_app", args: ["app_name": .string("Safari")])
+        guard case .invalid = plan(allowed) else { return XCTFail("expected invalid") }
+        guard case .invalid = plan(decision: nil, result: nil, fallbackLabel: "") else { return XCTFail("nothing at all") }
     }
 
     func testSummaries() {

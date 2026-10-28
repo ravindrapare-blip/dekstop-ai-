@@ -25,7 +25,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller = CapsuleController(
             client: client,
             voice: LocalVoiceInput(client: client, recorder: MicRecorder()),
-            runner: UnavailableRunner(),      // replaced in phase 5
             speech: LocalSpeech(client: client, player: AudioPlayer()),
             speakMode: config.speakReplies
         )

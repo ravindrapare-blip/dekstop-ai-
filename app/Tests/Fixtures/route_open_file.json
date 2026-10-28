@@ -1,0 +1,30 @@
+{
+  "args": {
+    "path_or_name": "budget.pdf"
+  },
+  "attempts": 1,
+  "fallback": false,
+  "guard": {
+    "args": {
+      "path_or_name": "/Users/me/Documents/budget.pdf"
+    },
+    "authorized": true,
+    "confirmation_id": null,
+    "message": "",
+    "outcome": "allow",
+    "reason": "open_file is a low-risk action",
+    "requires_acknowledgment": false,
+    "risk": "low",
+    "tool": "open_file"
+  },
+  "note": "",
+  "requires_confirmation": false,
+  "result": {
+    "choice": null,
+    "items": [],
+    "message": "Opened budget.pdf.",
+    "status": "done",
+    "via": "open"
+  },
+  "tool": "open_file"
+}

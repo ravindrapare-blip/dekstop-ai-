@@ -88,24 +88,3 @@ public enum SpeakMode: String, Equatable {
     case always
     case never
 }
-
-// MARK: - Actions
-
-public enum RunResult: Equatable {
-    case completed(String)
-    case notAvailable(String)
-    case failed(String)
-}
-
-/// Runs an action the backend has authorized. Implemented in phases 5 to 8.
-public protocol ActionRunner {
-    func run(_ action: AuthorizedAction) async -> RunResult
-}
-
-/// Used until actions can be executed. It never pretends something happened.
-public struct UnavailableRunner: ActionRunner {
-    public init() {}
-    public func run(_ action: AuthorizedAction) async -> RunResult {
-        .notAvailable("I understood: \(action.summary). Running actions isn't built yet, so nothing was done.")
-    }
-}

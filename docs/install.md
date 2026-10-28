@@ -65,7 +65,18 @@ Build whisper.cpp, download a model and install Piper as described in `docs/voic
 
 It reports what is missing and does a real round trip (speaks a sentence and transcribes it back), printing how long each took. Voice is optional: without it the capsule falls back to typing.
 
-## 6. Troubleshooting
+## 6. Apps and files (phase 5)
+
+Nothing to install for opening files and for AppleScript. For Hammerspoon, install a release that supports macOS 12, then:
+
+```bash
+scripts/setup_hammerspoon.sh        # then reload Hammerspoon's config from its menu bar icon
+.venv/bin/python scripts/automation_check.py
+```
+
+See `docs/actions.md`.
+
+## 7. Troubleshooting
 
 - **`python3: command not found`**: install Python with Homebrew and reopen the terminal.
 - **Port 8765 in use**: change `backend.port` in `config.yaml`.

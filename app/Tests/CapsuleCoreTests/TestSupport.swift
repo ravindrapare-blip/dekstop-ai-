@@ -18,8 +18,8 @@ enum Fixtures {
         try JSONDecoder().decode(RouteResponse.self, from: data(name))
     }
 
-    static func decision(_ name: String) throws -> GuardDecision {
-        try JSONDecoder().decode(GuardDecision.self, from: data(name))
+    static func confirm(_ name: String) throws -> ConfirmResponse {
+        try JSONDecoder().decode(ConfirmResponse.self, from: data(name))
     }
 }
 

@@ -43,6 +43,14 @@ final class CapsuleViewModel: ObservableObject {
         relayout()
     }
 
+    func choose(_ option: ChoiceOption) {
+        controller.choose(optionId: option.id)
+    }
+
+    func cancelChoice() {
+        controller.cancelChoice()
+    }
+
     func toggleMic() {
         controller.toggleMic()
     }
@@ -53,7 +61,9 @@ final class CapsuleViewModel: ObservableObject {
 
     /// Escape: undo the most recent thing, and hide only when there is nothing left to undo.
     func escape() {
-        if state.pending != nil {
+        if state.choice != nil {
+            controller.cancelChoice()
+        } else if state.pending != nil {
             controller.confirm(approved: false)
         } else if state.phase == .thinking {
             controller.cancel()

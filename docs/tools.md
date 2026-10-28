@@ -1,6 +1,6 @@
 # Tool system
 
-The model never acts directly. It picks **one tool** from a fixed registry and returns JSON. The backend validates it. Executing the tool is a separate step handled by later phases.
+The model never acts directly. It picks **one tool** from a fixed registry and returns JSON. The backend validates it. Running a tool is a separate step: the backend finds the real target, the safety layer judges it, and only then is the tool run (`docs/actions.md`).
 
 ## Output format
 
@@ -56,3 +56,11 @@ Add one `ToolSpec` to `backend/tool_defs.py`, with its parameters and a one-line
 .venv/bin/python scripts/validate_model.py   # 12 sample requests: accuracy, JSON validity, speed
 .venv/bin/python scripts/validate_model.py --model llama3.1:8b
 ```
+
+## What runs today
+
+| Runs now | Not built yet |
+|---|---|
+| `open_app`, `focus_app`, `close_app`, `open_file`, `open_folder`, `search_files`, `get_recent_files`, `reply` | browser tools (phase 6), reminders and notes (phase 7), `organize_desktop` (phase 8), `get_time`, `get_battery`, `set_volume` |
+
+A tool that is registered but not built answers "That isn't something I can do yet, so nothing was done."

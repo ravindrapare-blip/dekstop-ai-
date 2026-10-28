@@ -54,7 +54,7 @@ Bad values fall back to the default and the capsule shows a warning at launch. I
 Sources/CapsuleCore/   all the logic, Foundation only, unit tested
   CapsuleController    typed and spoken requests, confirmation, cancel, fallback to typing
   CapsuleState         the states and the pure function that moves between them
-  Planning             turns a backend decision into one step; never trusts an inconsistent answer
+  Planning             turns a backend answer into one step; never trusts an inconsistent answer
   BackendClient        the only network code; loopback addresses only
   VoiceInput, Speech   microphone and speaker logic: silence detection, permissions, backend calls
   Ports                the interfaces for microphone, speaker, voice and actions, with stand-ins
@@ -72,9 +72,17 @@ The mic button records, transcribes with whisper.cpp through the backend, and se
 
 Voice needs the engines installed on the Mac (`scripts/voice_check.py` tells you what is missing).
 
+## Actions and choices
+
+The app does not run anything. The backend finds the real app or file, asks the safety layer, and only then does it, and the app shows what happened ("Opened Google Chrome.", "Asked Safari to quit."). Details: `../docs/actions.md`.
+
+- If several apps or files could match ("report.pdf" in Documents and in Downloads), the capsule lists them with their locations. Click one, or "None of these". Esc cancels.
+- A name that cannot be found is explained, not guessed.
+- The app only believes a result that fits the safety decision beside it: "done" without an authorizing decision is shown as an error.
+
 ## Not connected yet
 
-- **Running actions:** authorized actions go to a runner that says "nothing was done". Phase 5 onward supplies a real `ActionRunner`. The capsule never claims an action happened when it didn't.
+- **Reminders, notes, browser actions:** those tools answer "That isn't something I can do yet, so nothing was done." until their phases.
 - **Play Media** has no matching tool yet, so the assistant will answer that it can't.
 - **Answering confirmations by voice:** you still click Confirm or Cancel.
 

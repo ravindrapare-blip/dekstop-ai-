@@ -1,10 +1,17 @@
 # automation/
 
-macOS automation through Hammerspoon (phase 4).
+Doing things on the Mac. Overview and setup: `docs/actions.md`.
 
-- `hammerspoon/init.lua` is the config that Hammerspoon loads for this project.
-- The backend sends named actions (for example `app.open`, `window.focus`) to a localhost-only listener with a shared token.
-- Hammerspoon never evaluates text it receives. There is no Lua-eval or shell action.
-- Install a Hammerspoon release that supports macOS 12. The current `main` targets macOS 13.
+| File | Job |
+|---|---|
+| `apps.py` | Lists installed apps from the standard folders and matches names |
+| `files.py` | Finds files and folders in a few safe folders, with limits |
+| `fuzzy.py` | Forgiving name matching (typos, aliases, type words) and the "one clear winner or ask" rule |
+| `service.py` | `prepare()` finds the real target, `execute()` does the action, choices for several matches |
+| `controller.py` | Opens, focuses and quits apps: Hammerspoon first, then AppleScript or `open` |
+| `hammerspoon.py` | Client for the Hammerspoon listener (token, localhost only) |
+| `applescript.py` | osascript with the app passed as an argument |
+| `token.py` | The shared secret in `data/.token` |
+| `hammerspoon/init.lua` | The Hammerspoon side: four named actions, token required, localhost only |
 
-Phase 0 contains only an empty `init.lua`.
+This package never decides what is allowed. `backend/pipeline.py` runs: find the target, ask the safety layer, and only then call `execute()`.

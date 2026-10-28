@@ -6,6 +6,7 @@
   "outcome": "block",
   "reason": "no pending action with that id (it may have expired)",
   "requires_acknowledgment": false,
+  "result": null,
   "risk": "critical",
   "tool": ""
 }

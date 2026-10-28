@@ -7,7 +7,7 @@
 | 2 | Safety layer: guardrail manager, risk levels, confirmation flow, dry-run | done |
 | 3 | Floating capsule UI (SwiftUI) | done, needs first-run check on a Mac (`app/README.md`) |
 | 4 | Local voice input and output (whisper.cpp, Piper) | done, needs engines installed and a first-run check on a Mac (`docs/voice.md`) |
-| 5 | macOS app and file control (Hammerspoon, AppleScript) | |
+| 5 | macOS app and file control (Hammerspoon, AppleScript) | done, needs a first-run check on a Mac (`docs/actions.md`) |
 | 6 | Browser automation (Puppeteer) | |
 | 7 | Reminders, tasks, notes, local memory (SQLite) | |
 | 8 | Safe desktop organization | |

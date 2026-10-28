@@ -1,0 +1,33 @@
+{
+  "args": {
+    "path_or_name": "report.pdf"
+  },
+  "attempts": 1,
+  "fallback": false,
+  "guard": null,
+  "note": "",
+  "requires_confirmation": false,
+  "result": {
+    "choice": {
+      "choice_id": "c0ffee123456",
+      "options": [
+        {
+          "detail": "~/Downloads",
+          "id": "1",
+          "label": "report.pdf"
+        },
+        {
+          "detail": "~/Documents",
+          "id": "2",
+          "label": "report.pdf"
+        }
+      ],
+      "prompt": "I found 2 files that could match \u201creport.pdf\u201d. Which one?"
+    },
+    "items": [],
+    "message": "I found 2 files that could match \u201creport.pdf\u201d. Which one?",
+    "status": "choose",
+    "via": ""
+  },
+  "tool": "open_file"
+}

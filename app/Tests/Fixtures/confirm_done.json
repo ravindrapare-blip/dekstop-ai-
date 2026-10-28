@@ -8,6 +8,13 @@
   "outcome": "allow",
   "reason": "close_app is a medium-risk action",
   "requires_acknowledgment": false,
+  "result": {
+    "choice": null,
+    "items": [],
+    "message": "Asked Safari to quit.",
+    "status": "done",
+    "via": "AppleScript"
+  },
   "risk": "medium",
   "tool": "close_app"
 }

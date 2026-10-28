@@ -42,12 +42,12 @@ confirm(id, approved,     ->  ALLOW      exactly the call that was asked about, 
 
 ## HTTP
 
-`POST /route` returns the tool call plus a `guard` object. `POST /confirm` with `{"confirmation_id", "approved", "acknowledge_risk"}` returns the final decision. Only a decision with `"authorized": true` may be executed.
+`POST /route` returns the tool call, a `guard` object (null while a question is open or when nothing was found) and a `result` (what was done). `POST /confirm` with `{"confirmation_id", "approved", "acknowledge_risk"}` returns the final decision plus the result. `POST /choose` answers a "which one?" question. The backend runs an action only after an authorized decision (`backend/pipeline.py`).
 
 The backend listens on localhost only, but until the shared token is added (phase 9) any local process could call `/confirm`.
 
 ## Rules for executors (phases 5 to 8)
 
 1. Run a tool only for a decision with `authorized: true`, using the call inside that decision.
-2. If the executor resolves a name to a real path or address (for example "Downloads" to a folder, or a bare domain to `https://...`), it must evaluate the resolved value again before acting. The guard can only check what it is given.
+2. If the executor resolves a name to a real path or address (for example "Downloads" to a folder, or a bare domain to `https://...`), the resolved value must be judged before acting. The guard can only check what it is given. For apps and files this is built in: `backend/pipeline.py` resolves the name first and gives the safety layer the real target.
 3. Never pass arguments to a shell.

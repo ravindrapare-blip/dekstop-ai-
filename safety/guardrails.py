@@ -165,6 +165,16 @@ class GuardrailManager:
         decision = self._decision(Outcome.ALLOW, a, call, "", approved=True)
         return self._finish(decision, "confirm")
 
+    def record_execution(self, tool: str, args: dict, status: str, via: str = "") -> None:
+        """Log what happened after an authorized action ran. A logging problem never undoes the action."""
+        if self.audit is None:
+            return
+        try:
+            self.audit.write({"stage": "execute", "tool": tool, "args": summarize_args(args),
+                              "status": status, "via": via})
+        except OSError as e:
+            log.error("could not log the result of %s: %s", tool, e)
+
     def pending_count(self) -> int:
         with self._lock:
             self._purge()

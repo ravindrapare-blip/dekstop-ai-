@@ -1,6 +1,6 @@
 # Architecture
 
-Status: **Phases 0-4 done** (runtime, tool calling, safety layer, capsule UI, voice). See `docs/tools.md`, `safety/README.md`, `app/README.md` and `docs/voice.md`. Later components are still design only.
+Status: **Phases 0-5 done** (runtime, tool calling, safety layer, capsule UI, voice, apps and files). See `docs/tools.md`, `safety/README.md`, `app/README.md`, `docs/voice.md` and `docs/actions.md`. Later components are still design only.
 
 ## 1. Goals and constraints
 
@@ -20,7 +20,7 @@ A local-first desktop assistant for a **2017 MacBook Air (Intel, dual-core, no G
 | `safety/` | Python package, YAML policy | in-process in backend | Classifies every action, gates approval, writes the audit log |
 | `voice/` | Python wrappers | child processes, on demand | Runs `whisper.cpp` (STT) and `piper` or `say` (TTS). The app records and plays; this only converts |
 | `browser/` | Node.js, `puppeteer-core` | worker, started on demand | Drives the user's existing Chrome through a fixed set of actions |
-| `automation/` | Hammerspoon (Lua) | Hammerspoon itself | Executes a fixed set of named macOS actions |
+| `automation/` | Python + Hammerspoon (Lua) | in the backend; Hammerspoon itself | Finds apps and files, runs authorized actions. Hammerspoon runs four named actions |
 | `data/` | SQLite, JSON lines | files | Reminders, tasks, notes, memory (SQLite); audit log (`audit.jsonl`) |
 | Ollama | external binary | long-running, `127.0.0.1:11434` | Local LLM inference |
 

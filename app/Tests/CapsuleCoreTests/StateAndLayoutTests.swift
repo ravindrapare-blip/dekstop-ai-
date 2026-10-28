@@ -217,4 +217,58 @@ final class StateAndLayoutTests: XCTestCase {
             XCTAssertTrue(s.prefill.hasSuffix(" "), "\(s.title) should leave room to keep typing")
         }
     }
+
+    // MARK: - choosing between matches
+
+    private let choice = ChoicePrompt(
+        choiceId: "c1", prompt: "I found 2 files. Which one?",
+        options: [ChoiceOption(id: "1", label: "a.pdf", detail: "~/Documents"), ChoiceOption(id: "2", label: "a.pdf", detail: "~/Downloads")]
+    )
+
+    func testAQuestionWaitsForTheUser() {
+        let s = reduce(CapsuleState(), .choosing(choice))
+        XCTAssertEqual(s.phase, .waiting)
+        XCTAssertTrue(s.phase.isBusy)
+        XCTAssertEqual(s.message, choice.prompt)
+        XCTAssertEqual(s.choice, choice)
+        XCTAssertNil(s.pending)
+    }
+
+    func testAnythingElseClearsTheQuestion() {
+        let asking = reduce(CapsuleState(), .choosing(choice))
+        let next: [Event] = [
+            .started, .executing("x"), .failed("boom"), .notice("n", .warning),
+            .finished(message: "m", tone: .neutral, lastAction: nil), .waiting(pending),
+        ]
+        for event in next {
+            XCTAssertNil(reduce(asking, event).choice, "\(event)")
+        }
+    }
+
+    func testAQuestionSurvivesHidingTheWindow() {
+        let asking = reduce(CapsuleState(), .choosing(choice))
+        XCTAssertEqual(reduce(asking, .dismissed), asking)
+    }
+
+    func testTheQuestionShowsOneButtonPerOptionAndCancel() {
+        let layout = CapsuleLayout(state: reduce(CapsuleState(), .choosing(choice)), inputIsEmpty: true)
+        XCTAssertTrue(layout.showChoices)
+        XCTAssertEqual(layout.choiceCount, 2)
+        XCTAssertFalse(layout.showChips)
+        XCTAssertFalse(layout.showConfirm)
+        XCTAssertEqual(CapsuleLayout.choices(count: 2), 3 * 26 + 2 * 4)
+        XCTAssertEqual(layout.height, 16 + 40 + 6 + 54 + 6 + 86)
+    }
+
+    func testTheLastActionLabelMakesRoomForTheQuestion() {
+        var s = reduce(CapsuleState(), .executing("earlier"))
+        s = reduce(s, .choosing(choice))
+        XCTAssertFalse(CapsuleLayout(state: s, inputIsEmpty: true).showLastAction)
+    }
+
+    func testFiveOptionsStillFitOnScreen() {
+        let many = ChoicePrompt(choiceId: "c", prompt: "Which?", options: (1...5).map { ChoiceOption(id: "\($0)", label: "f\($0)") })
+        let height = CapsuleLayout(state: reduce(CapsuleState(), .choosing(many)), inputIsEmpty: true).height
+        XCTAssertLessThan(height, 400)
+    }
 }

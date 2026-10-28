@@ -19,5 +19,12 @@
   },
   "note": "",
   "requires_confirmation": false,
+  "result": {
+    "choice": null,
+    "items": [],
+    "message": "Opened Google Chrome.",
+    "status": "done",
+    "via": "open"
+  },
   "tool": "open_app"
 }

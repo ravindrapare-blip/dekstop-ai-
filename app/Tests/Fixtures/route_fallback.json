@@ -19,5 +19,6 @@
   },
   "note": "invalid model output: output is not valid JSON",
   "requires_confirmation": false,
+  "result": null,
   "tool": "reply"
 }

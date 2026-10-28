@@ -11,6 +11,7 @@ struct CapsuleView: View {
         VStack(alignment: .leading, spacing: CGFloat(CapsuleLayout.spacing)) {
             inputRow
             if vm.layout.showMessage { messageRow }
+            if vm.layout.showChoices { choicesRows }
             if vm.layout.showAcknowledge { acknowledgeRow }
             if vm.layout.showConfirm { confirmRow }
             if vm.layout.showChips { chipsRows }
@@ -72,6 +73,46 @@ struct CapsuleView: View {
                 maxHeight: CGFloat(CapsuleLayout.message),
                 alignment: .topLeading
             )
+    }
+
+    private var choicesRows: some View {
+        let options = vm.state.choice?.options ?? []
+        return VStack(alignment: .leading, spacing: CGFloat(CapsuleLayout.choiceSpacing)) {
+            ForEach(options) { option in
+                choiceButton(option)
+            }
+            Button(action: { vm.cancelChoice() }) {
+                Text("None of these")
+                    .font(.system(size: 11))
+                    .foregroundColor(Color.white.opacity(0.6))
+                    .frame(maxWidth: .infinity, minHeight: CGFloat(CapsuleLayout.choiceRow), alignment: .leading)
+                    .padding(.horizontal, 10)
+            }
+            .buttonStyle(.plain)
+        }
+        .frame(height: CGFloat(CapsuleLayout.choices(count: options.count)), alignment: .top)
+    }
+
+    private func choiceButton(_ option: ChoiceOption) -> some View {
+        Button(action: { vm.choose(option) }) {
+            HStack(spacing: 8) {
+                Text(option.label)
+                    .font(.system(size: 12, weight: .medium))
+                    .lineLimit(1)
+                if !option.detail.isEmpty {
+                    Text(option.detail)
+                        .font(.system(size: 11))
+                        .foregroundColor(Color.white.opacity(0.5))
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+            }
+            .foregroundColor(.white)
+            .padding(.horizontal, 10)
+            .frame(maxWidth: .infinity, minHeight: CGFloat(CapsuleLayout.choiceRow), maxHeight: CGFloat(CapsuleLayout.choiceRow))
+            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.white.opacity(0.12)))
+        }
+        .buttonStyle(.plain)
     }
 
     private var acknowledgeRow: some View {

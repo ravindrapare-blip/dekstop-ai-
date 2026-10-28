@@ -4,16 +4,6 @@ import XCTest
 import FoundationNetworking
 #endif
 
-final class RecordingRunner: ActionRunner {
-    private(set) var actions: [AuthorizedAction] = []
-    var result: RunResult
-    init(result: RunResult = .completed("Done.")) { self.result = result }
-    func run(_ action: AuthorizedAction) async -> RunResult {
-        actions.append(action)
-        return result
-    }
-}
-
 final class FakeVoice: VoiceInput {
     var isAvailable = true
     var unavailableReason = "Voice is off."
@@ -31,12 +21,11 @@ final class FakeVoice: VoiceInput {
 final class ControllerTests: XCTestCase {
     private func make(
         _ transport: FakeTransport,
-        runner: ActionRunner = RecordingRunner(),
         voice: VoiceInput = UnavailableVoiceInput(),
         speech: SpeechOutput = UnavailableSpeech(),
         mode: SpeakMode = .voiceOnly
     ) throws -> CapsuleController {
-        CapsuleController(client: try makeClient(transport), voice: voice, runner: runner, speech: speech, speakMode: mode)
+        CapsuleController(client: try makeClient(transport), voice: voice, speech: speech, speakMode: mode)
     }
 
     private func settle(_ c: CapsuleController) async {
@@ -55,100 +44,116 @@ final class ControllerTests: XCTestCase {
         XCTAssertEqual(c.state.lastAction, "reply")
     }
 
-    func testStatesAreReportedInOrder() async throws {
-        let c = try make(.serving(["/route": "route_allow_open_app"]), runner: RecordingRunner(result: .completed("Opened.")))
+    func testAnActionTheBackendCarriedOutIsReported() async throws {
+        let c = try make(.serving(["/route": "route_allow_open_app"]))
         var phases: [Phase] = []
         c.onChange = { phases.append($0.phase) }
         c.submit("open chrome")
         await settle(c)
-        XCTAssertEqual(phases, [.thinking, .executing, .done])
-    }
-
-    func testAuthorizedActionReachesTheRunner() async throws {
-        let runner = RecordingRunner(result: .completed("Opened Google Chrome."))
-        let c = try make(.serving(["/route": "route_allow_open_app"]), runner: runner)
-        c.submit("open chrome")
-        await settle(c)
-        XCTAssertEqual(runner.actions.map { $0.tool }, ["open_app"])
+        XCTAssertEqual(phases, [.thinking, .done])
         XCTAssertEqual(c.state.tone, .success)
         XCTAssertEqual(c.state.message, "Opened Google Chrome.")
         XCTAssertEqual(c.state.lastAction, "open app (Google Chrome)")
     }
 
-    func testWithoutARunnerNothingIsClaimedToHaveHappened() async throws {
-        let c = try make(.serving(["/route": "route_allow_open_app"]), runner: UnavailableRunner())
-        c.submit("open chrome")
+    func testAnAppThatCannotBeFoundIsExplainedNotGuessed() async throws {
+        let c = try make(.serving(["/route": "route_not_found"]))
+        c.submit("open photoshop")
         await settle(c)
         XCTAssertEqual(c.state.phase, .done)
         XCTAssertEqual(c.state.tone, .warning)
-        XCTAssertTrue(c.state.message.contains("nothing was done"))
-        XCTAssertEqual(c.state.lastAction, "open app (Google Chrome) (not run)")
+        XCTAssertTrue(c.state.message.contains("Photoshop"))
+        XCTAssertEqual(c.state.lastAction, "open app (Photoshop) (failed)")
     }
 
-    func testRunnerFailureIsShownAsAnError() async throws {
-        let c = try make(.serving(["/route": "route_allow_open_app"]), runner: RecordingRunner(result: .failed("No such app.")))
-        c.submit("open chrome")
+    func testSearchResultsAreShown() async throws {
+        let c = try make(.serving(["/route": "route_search"]))
+        c.submit("find budget")
         await settle(c)
-        XCTAssertEqual(c.state.tone, .error)
-        XCTAssertEqual(c.state.lastAction, "open app (Google Chrome) (failed)")
+        XCTAssertEqual(c.state.message, "Found 2: budget.pdf, budget old.pdf")
+        XCTAssertEqual(c.state.tone, .success)
     }
 
-    func testBlockedRequestsAreRefusedAndNeverRun() async throws {
-        let runner = RecordingRunner()
-        let c = try make(.serving(["/route": "route_block_url"]), runner: runner)
+    func testAToolThatIsNotBuiltYetSaysSo() async throws {
+        let c = try make(.serving(["/route": "route_not_available"]))
+        c.submit("remind me")
+        await settle(c)
+        XCTAssertEqual(c.state.tone, .warning)
+        XCTAssertTrue(c.state.message.contains("nothing was done"))
+        XCTAssertEqual(c.state.lastAction, "create reminder (2025-01-01T18:00:00, call mom) (not run)")
+    }
+
+    func testBlockedRequestsAreRefused() async throws {
+        let c = try make(.serving(["/route": "route_block_url"]))
         c.submit("go there")
         await settle(c)
         XCTAssertEqual(c.state.phase, .done)
         XCTAssertEqual(c.state.tone, .warning)
         XCTAssertTrue(c.state.message.hasPrefix("I can't do that"))
-        XCTAssertTrue(runner.actions.isEmpty)
+        XCTAssertEqual(c.state.lastAction, "blocked")
     }
 
-    func testDryRunPreviewIsShownAndNeverRun() async throws {
-        let runner = RecordingRunner()
-        let c = try make(.serving(["/route": "route_dry_run"]), runner: runner)
+    func testDryRunPreviewIsShown() async throws {
+        let c = try make(.serving(["/route": "route_dry_run"]))
         c.submit("quit safari")
         await settle(c)
         XCTAssertTrue(c.state.message.hasPrefix("Dry run:"))
-        XCTAssertTrue(runner.actions.isEmpty)
     }
 
-    func testInconsistentAnswerIsAnErrorAndNeverRun() async throws {
-        let body = Data(#"{"tool":"open_app","args":{},"requires_confirmation":false,"fallback":false,"note":"","attempts":1,"guard":{"outcome":"allow","authorized":false,"risk":"low","reason":"","message":"","tool":"open_app","args":{},"confirmation_id":null,"requires_acknowledgment":false}}"#.utf8)
-        let runner = RecordingRunner()
-        let c = try make(FakeTransport { _ in (body, 200) }, runner: runner)
+    func testAnAllowedActionWithoutAResultIsNeverShownAsDone() async throws {
+        let body = Data(#"{"tool":"open_app","args":{},"requires_confirmation":false,"fallback":false,"note":"","attempts":1,"guard":{"outcome":"allow","authorized":true,"risk":"low","reason":"","message":"","tool":"open_app","args":{},"confirmation_id":null,"requires_acknowledgment":false},"result":null}"#.utf8)
+        let c = try make(FakeTransport { _ in (body, 200) })
         c.submit("open")
         await settle(c)
         XCTAssertEqual(c.state.phase, .error)
-        XCTAssertTrue(runner.actions.isEmpty)
+    }
+
+    func testAResultThatContradictsTheDecisionIsNeverShown() async throws {
+        // "done" beside a decision that did not authorize anything
+        let body = Data(#"{"tool":"close_app","args":{},"requires_confirmation":true,"fallback":false,"note":"","attempts":1,"guard":{"outcome":"block","authorized":false,"risk":"critical","reason":"x","message":"no","tool":"close_app","args":{},"confirmation_id":null,"requires_acknowledgment":false},"result":{"status":"done","message":"Quit Safari.","items":[],"choice":null,"via":""}}"#.utf8)
+        let c = try make(FakeTransport { _ in (body, 200) })
+        c.submit("quit")
+        await settle(c)
+        XCTAssertEqual(c.state.phase, .error)
+        XCTAssertFalse(c.state.message.contains("Quit Safari"))
+    }
+
+    func testInconsistentAnswerIsAnError() async throws {
+        let body = Data(#"{"tool":"open_app","args":{},"requires_confirmation":false,"fallback":false,"note":"","attempts":1,"guard":{"outcome":"allow","authorized":false,"risk":"low","reason":"","message":"","tool":"open_app","args":{},"confirmation_id":null,"requires_acknowledgment":false},"result":null}"#.utf8)
+        let c = try make(FakeTransport { _ in (body, 200) })
+        c.submit("open")
+        await settle(c)
+        XCTAssertEqual(c.state.phase, .error)
     }
 
     // MARK: - confirmation
 
-    func testApprovedConfirmationRunsExactlyTheAuthorizedAction() async throws {
-        let runner = RecordingRunner(result: .completed("Closed Safari."))
-        let transport = FakeTransport.serving(["/route": "route_confirm_close_app", "/confirm": "confirm_allow"])
-        let c = try make(transport, runner: runner)
+    func testApprovedConfirmationShowsWhatTheBackendDid() async throws {
+        let transport = FakeTransport.serving(["/route": "route_confirm_close_app", "/confirm": "confirm_done"])
+        let c = try make(transport)
+        var phases: [Phase] = []
         c.submit("quit safari")
         await settle(c)
         XCTAssertEqual(c.state.phase, .waiting)
         XCTAssertEqual(c.state.pending?.id, "abc123def456")
-        XCTAssertTrue(runner.actions.isEmpty)   // nothing runs before the user answers
+        XCTAssertTrue(transport.requests(to: "/confirm").isEmpty)    // nothing is sent before the user answers
 
+        c.onChange = { phases.append($0.phase) }
         c.confirm(approved: true)
+        XCTAssertEqual(c.state.phase, .executing)                    // the backend is carrying it out
+        XCTAssertEqual(c.state.lastAction, "close app (Safari)")
         await settle(c)
         XCTAssertEqual(c.state.phase, .done)
-        XCTAssertEqual(runner.actions.map { $0.tool }, ["close_app"])
-        XCTAssertEqual(runner.actions.first?.args["app_name"], .string("Safari"))
+        XCTAssertEqual(c.state.message, "Asked Safari to quit.")
+        XCTAssertEqual(phases, [.executing, .done])
         let body = transport.body(of: try XCTUnwrap(transport.requests(to: "/confirm").first))
         XCTAssertEqual(body["confirmation_id"] as? String, "abc123def456")
         XCTAssertEqual(body["approved"] as? Bool, true)
     }
 
-    func testCancellingNeverRunsAndDoesNotWaitForTheBackend() async throws {
-        let runner = RecordingRunner()
+    func testCancellingDoesNotWaitForTheBackend() async throws {
         let transport = FakeTransport.serving(["/route": "route_confirm_close_app", "/confirm": "confirm_expired"])
-        let c = try make(transport, runner: runner)
+        let c = try make(transport)
         c.submit("quit safari")
         await settle(c)
 
@@ -159,14 +164,12 @@ final class ControllerTests: XCTestCase {
         await waitUntil { transport.requests(to: "/confirm").count == 1 }
         let body = transport.body(of: try XCTUnwrap(transport.requests(to: "/confirm").first))
         XCTAssertEqual(body["approved"] as? Bool, false)
-        XCTAssertTrue(runner.actions.isEmpty)
     }
 
     func testHighRiskCannotBeApprovedWithoutAcknowledgment() async throws {
-        let transport = FakeTransport.serving(["/route": "route_confirm_high_risk", "/confirm": "confirm_allow"])
-        let runner = RecordingRunner()
-        let c = try make(transport, runner: runner)
-        c.submit("open ssh")
+        let transport = FakeTransport.serving(["/route": "route_confirm_high_risk", "/confirm": "confirm_done"])
+        let c = try make(transport)
+        c.submit("open etc")
         await settle(c)
         XCTAssertEqual(c.state.pending?.requiresAcknowledgment, true)
 
@@ -178,6 +181,18 @@ final class ControllerTests: XCTestCase {
         await settle(c)
         let body = transport.body(of: try XCTUnwrap(transport.requests(to: "/confirm").first))
         XCTAssertEqual(body["acknowledge_risk"] as? Bool, true)
+    }
+
+    func testAnExpiredConfirmationIsExplained() async throws {
+        let transport = FakeTransport.serving(["/route": "route_confirm_close_app", "/confirm": "confirm_expired"])
+        let c = try make(transport)
+        c.submit("quit safari")
+        await settle(c)
+        c.confirm(approved: true)
+        await settle(c)
+        XCTAssertEqual(c.state.phase, .done)
+        XCTAssertEqual(c.state.tone, .warning)
+        XCTAssertEqual(c.state.lastAction, "blocked")
     }
 
     func testTypingANewRequestWhileWaitingDeniesTheOldOne() async throws {
@@ -199,6 +214,91 @@ final class ControllerTests: XCTestCase {
         c.confirm(approved: true, acknowledgeRisk: true)
         XCTAssertEqual(c.state.phase, .idle)
         XCTAssertTrue(transport.requests.isEmpty)
+    }
+
+    // MARK: - choosing between several matches
+
+    func testSeveralMatchesAskWhichOne() async throws {
+        let c = try make(.serving(["/route": "route_choose_file"]))
+        c.submit("open report")
+        await settle(c)
+        XCTAssertEqual(c.state.phase, .waiting)
+        XCTAssertEqual(c.state.choice?.options.count, 2)
+        XCTAssertNil(c.state.pending)
+        XCTAssertTrue(c.state.message.contains("Which one?"))
+    }
+
+    func testPickingAMatchSendsThatChoiceAndShowsTheResult() async throws {
+        let transport = FakeTransport.serving(["/route": "route_choose_file", "/choose": "choose_done"])
+        let c = try make(transport)
+        c.submit("open report")
+        await settle(c)
+        let option = try XCTUnwrap(c.state.choice?.options.first { $0.detail == "~/Documents" })
+
+        var phases: [Phase] = []
+        c.onChange = { phases.append($0.phase) }
+        c.choose(optionId: option.id)
+        XCTAssertEqual(c.state.phase, .executing)
+        await settle(c)
+        XCTAssertEqual(phases, [.executing, .done])
+        XCTAssertEqual(c.state.message, "Opened report.pdf.")
+        XCTAssertEqual(c.state.lastAction, "open file (/Users/me/Documents/report.pdf)")
+        let body = transport.body(of: try XCTUnwrap(transport.requests(to: "/choose").first))
+        XCTAssertEqual(body["choice_id"] as? String, "c0ffee123456")
+        XCTAssertEqual(body["option_id"] as? String, option.id)
+    }
+
+    func testAnOptionThatWasNotOfferedIsIgnored() async throws {
+        let transport = FakeTransport.serving(["/route": "route_choose_file"])
+        let c = try make(transport)
+        c.submit("open report")
+        await settle(c)
+        c.choose(optionId: "99")
+        XCTAssertEqual(c.state.phase, .waiting)
+        XCTAssertTrue(transport.requests(to: "/choose").isEmpty)
+    }
+
+    func testCancellingAChoiceDoesNotWaitForTheBackend() async throws {
+        let transport = FakeTransport.serving(["/route": "route_choose_file", "/choose": "choose_expired"])
+        let c = try make(transport)
+        c.submit("open report")
+        await settle(c)
+
+        c.cancelChoice()
+        XCTAssertEqual(c.state.phase, .done)
+        XCTAssertEqual(c.state.message, "Cancelled.")
+        XCTAssertNil(c.state.choice)
+        await waitUntil { transport.requests(to: "/choose").count == 1 }
+        let body = transport.body(of: try XCTUnwrap(transport.requests(to: "/choose").first))
+        XCTAssertNil(body["option_id"])                    // no option means cancel
+    }
+
+    func testTypingWhileChoosingCancelsTheQuestion() async throws {
+        let transport = FakeTransport.serving(["/route": "route_choose_file", "/choose": "choose_expired"])
+        let c = try make(transport)
+        c.submit("open report")
+        await settle(c)
+        XCTAssertTrue(c.submit("something else"))
+        await waitUntil { transport.requests(to: "/choose").count == 1 }
+        XCTAssertNil(transport.body(of: try XCTUnwrap(transport.requests(to: "/choose").first))["option_id"])
+    }
+
+    func testAChoiceThatExpiredIsExplained() async throws {
+        let transport = FakeTransport.serving(["/route": "route_choose_file", "/choose": "choose_expired"])
+        let c = try make(transport)
+        c.submit("open report")
+        await settle(c)
+        c.choose(optionId: "1")
+        await settle(c)
+        XCTAssertEqual(c.state.phase, .done)
+        XCTAssertTrue(c.state.message.contains("expired"))
+    }
+
+    func testChoosingWithNothingToChooseDoesNothing() throws {
+        let c = try make(.serving([:]))
+        c.choose(optionId: "1")
+        c.cancelChoice()
+        XCTAssertEqual(c.state.phase, .idle)
     }
 
     // MARK: - input rules
@@ -430,9 +530,7 @@ final class ControllerTests: XCTestCase {
     func testFullVoicePipelineStatesAreInOrder() async throws {
         let voice = FakeVoice()
         let speech = FakeSpeech()
-        let c = try make(.serving(["/route": "route_allow_open_app"]),
-                         runner: RecordingRunner(result: .completed("Opened Google Chrome.")),
-                         voice: voice, speech: speech)
+        let c = try make(.serving(["/route": "route_allow_open_app"]), voice: voice, speech: speech)
         var phases: [Phase] = []
         c.onChange = { phases.append($0.phase) }
 
@@ -440,7 +538,7 @@ final class ControllerTests: XCTestCase {
         voice.emit(.processing)
         voice.emit(.transcript("open chrome"))
         await waitUntil { c.state.phase == .speaking }
-        XCTAssertEqual(phases, [.listening, .transcribing, .thinking, .executing, .done, .speaking])
+        XCTAssertEqual(phases, [.listening, .transcribing, .thinking, .done, .speaking])
         XCTAssertEqual(speech.spoken, ["Opened Google Chrome."])
 
         speech.emit(.finished)
@@ -626,12 +724,12 @@ final class ControllerTests: XCTestCase {
 
     func testSpokenRequestsGoThroughTheSameSafetyDecisions() async throws {
         let voice = FakeVoice()
-        let runner = RecordingRunner()
-        let c = try make(.serving(["/route": "route_block_url"]), runner: runner, voice: voice)
+        let transport = FakeTransport.serving(["/route": "route_block_url"])
+        let c = try make(transport, voice: voice)
         c.toggleMic()
         voice.emit(.transcript("go there"))
         await waitUntil { c.state.phase == .done }
         XCTAssertEqual(c.state.tone, .warning)
-        XCTAssertTrue(runner.actions.isEmpty)           // a spoken request is no more privileged than a typed one
+        XCTAssertEqual(transport.requests.map { $0.url?.path }, ["/route"])    // the same single request a typed one makes
     }
 }

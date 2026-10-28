@@ -78,6 +78,11 @@ public struct BackendClient {
         let dry_run: Bool?
     }
 
+    private struct ChooseBody: Encodable {
+        let choice_id: String
+        let option_id: String?
+    }
+
     private struct ConfirmBody: Encodable {
         let confirmation_id: String
         let approved: Bool
@@ -95,11 +100,16 @@ public struct BackendClient {
         try await post("route", body: RouteBody(text: text, dry_run: dryRun))
     }
 
-    public func confirm(id: String, approved: Bool, acknowledgeRisk: Bool) async throws -> GuardDecision {
+    public func confirm(id: String, approved: Bool, acknowledgeRisk: Bool) async throws -> ConfirmResponse {
         try await post(
             "confirm",
             body: ConfirmBody(confirmation_id: id, approved: approved, acknowledge_risk: acknowledgeRisk)
         )
+    }
+
+    /// Answer "which one did you mean?". Passing nil cancels.
+    public func choose(choiceId: String, optionId: String?) async throws -> RouteResponse {
+        try await post("choose", body: ChooseBody(choice_id: choiceId, option_id: optionId))
     }
 
     /// Sends WAV audio to the backend and returns the words. An empty string means nothing was heard.

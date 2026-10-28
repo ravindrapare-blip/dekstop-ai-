@@ -43,9 +43,20 @@ browser:
   profile_dir: data/chrome-profile   # dedicated profile, not the user's own
 
 automation:
-  enabled: false
-  host: 127.0.0.1
-  port: 8767             # Hammerspoon listener, must bind to localhost only
+  enabled: true
+  hammerspoon: true      # use Hammerspoon when it is running; otherwise AppleScript and "open"
+  host: 127.0.0.1        # Hammerspoon's local listener; must match the port in ~/.hammerspoon (scripts/setup_hammerspoon.sh)
+  port: 8767
+  token_file: data/.token   # shared secret between the backend and Hammerspoon (created automatically)
+
+files:
+  # Searched first. Everything must be inside your home folder; anything else is ignored.
+  search_dirs: [~/Desktop, ~/Documents, ~/Downloads]
+  # Only searched if nothing was found above. "~" is listed but never entered.
+  more_dirs: [~/Pictures, ~/Movies, ~/Music, "~"]
+  max_depth: 3
+  max_entries: 20000          # stop a search after looking at this many items
+  time_budget_seconds: 2
 
 safety:
   policy_file: safety/policy.yaml

@@ -49,6 +49,7 @@ public struct CapsuleState: Equatable {
     public var message: String = ""
     public var lastAction: String = ""
     public var pending: PendingConfirmation?
+    public var choice: ChoicePrompt?       // "which one did you mean?"
 
     public init() {}
 
@@ -78,6 +79,7 @@ public enum Event: Equatable {
     case speechFailed(String)                          // a short reason, shown beside the last action
     case notice(String, Tone)                          // a message with no request, e.g. voice unavailable
     case waiting(PendingConfirmation)
+    case choosing(ChoicePrompt)                        // several matches; waiting for the user to pick
     case executing(String)                             // label of the action being run
     case finished(message: String, tone: Tone, lastAction: String?)
     case failed(String)
@@ -93,6 +95,7 @@ public func reduce(_ state: CapsuleState, _ event: Event) -> CapsuleState {
         s.tone = .neutral
         s.message = ""
         s.pending = nil
+        s.choice = nil
     case .listening:
         s.phase = .listening
         s.tone = .neutral
@@ -116,28 +119,39 @@ public func reduce(_ state: CapsuleState, _ event: Event) -> CapsuleState {
         s.tone = tone
         s.message = text
         s.pending = nil
+        s.choice = nil
     case .waiting(let pending):
         s.phase = .waiting
         s.tone = .warning
         s.message = pending.message
         s.pending = pending
+        s.choice = nil
+    case .choosing(let choice):
+        s.phase = .waiting
+        s.tone = .neutral
+        s.message = choice.prompt
+        s.pending = nil
+        s.choice = choice
     case .executing(let label):
         s.phase = .executing
         s.tone = .neutral
         s.message = ""
         s.pending = nil
+        s.choice = nil
         s.lastAction = label
     case .finished(let message, let tone, let lastAction):
         s.phase = .done
         s.tone = tone
         s.message = message
         s.pending = nil
+        s.choice = nil
         if let lastAction = lastAction { s.lastAction = lastAction }
     case .failed(let message):
         s.phase = .error
         s.tone = .error
         s.message = message
         s.pending = nil
+        s.choice = nil
     case .dismissed:
         // Hiding the window clears a finished result. Work in progress is kept.
         if !s.phase.isBusy {

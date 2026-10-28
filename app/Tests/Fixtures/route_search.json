@@ -1,0 +1,33 @@
+{
+  "args": {
+    "query": "budget"
+  },
+  "attempts": 1,
+  "fallback": false,
+  "guard": {
+    "args": {
+      "query": "budget"
+    },
+    "authorized": true,
+    "confirmation_id": null,
+    "message": "",
+    "outcome": "allow",
+    "reason": "search_files is a low-risk action",
+    "requires_acknowledgment": false,
+    "risk": "low",
+    "tool": "search_files"
+  },
+  "note": "",
+  "requires_confirmation": false,
+  "result": {
+    "choice": null,
+    "items": [
+      "budget.pdf  (~/Documents)",
+      "budget old.pdf  (~/Documents)"
+    ],
+    "message": "Found 2: budget.pdf, budget old.pdf",
+    "status": "done",
+    "via": ""
+  },
+  "tool": "search_files"
+}

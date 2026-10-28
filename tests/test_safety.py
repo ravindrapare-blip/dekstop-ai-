@@ -13,6 +13,7 @@ from backend.llm import OllamaClient
 from backend.main import create_app
 from backend.tool_defs import build_registry
 from backend.toolcall import ToolCall
+from fakes import quick_actions
 from safety import AuditLog, GuardrailManager, Outcome, Policy, PolicyError, Risk
 
 POLICY = Policy.load(ROOT / "safety" / "policy.yaml")
@@ -409,7 +410,7 @@ def api(model_json, tmp_path, **guard_kw):
 
     llm = OllamaClient("http://127.0.0.1:11434", "m", transport=httpx.MockTransport(handler))
     cfg = {"ollama": {}, "router": {"max_retries": 0}}
-    return TestClient(create_app(cfg, llm, guard=make_guard(tmp_path, **guard_kw)))
+    return TestClient(create_app(cfg, llm, guard=make_guard(tmp_path, **guard_kw), actions=quick_actions()))
 
 
 def call_json(tool, **args):
