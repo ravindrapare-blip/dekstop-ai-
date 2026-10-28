@@ -1,0 +1,10 @@
+{
+  "name": "assistant-browser-worker",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Chrome automation worker. Phase 0: dependency only.",
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "puppeteer-core": "23.11.1"
+  }
+}

@@ -1,0 +1,6 @@
+-- Hammerspoon entry point for the assistant. Phase 0: intentionally empty.
+--
+-- Phase 4 will start an hs.httpserver here that:
+--   * calls setInterface("localhost") first (the default is all interfaces),
+--   * requires the shared token from data/.token,
+--   * dispatches only named actions from a fixed table, never evaluates received text.

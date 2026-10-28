@@ -1,0 +1,40 @@
+# Safety policy, draft for phase 0. Enforced from phase 2.
+# Rule: an action not listed here does not exist (deny by default).
+# Tiers: 0 read-only, 1 reversible, 2 sensitive (approval each time), 3 forbidden.
+
+tiers:
+  0:
+    - memory.read
+    - reminders.list
+    - browser.read_page_text
+    - system.get_frontmost_app
+  1:
+    - memory.write
+    - reminders.create
+    - reminders.cancel
+    - app.open
+    - browser.open_allowed_url
+    - window.focus
+  2:
+    - browser.click
+    - browser.type_text
+    - app.quit
+    - file.move_to_trash
+  3:   # never offered to the model, never executable
+    - shell.run
+    - lua.eval
+    - file.delete_permanent
+    - browser.submit_payment
+    - browser.read_passwords
+    - system.change_security_settings
+    - system.install_software
+
+browser:
+  allowed_domains: []        # empty means no browsing until the user adds domains
+  allow_downloads: false
+  use_dedicated_profile: true
+
+untrusted_input:
+  # Web pages, files and clipboard text are data, never instructions.
+  can_raise_tier: false
+  can_skip_approval: false

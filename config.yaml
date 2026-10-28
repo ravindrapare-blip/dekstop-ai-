@@ -1,0 +1,45 @@
+# Assistant configuration. No secrets here; the shared service token lives in data/.token.
+# Values are conservative defaults for a 2017 MacBook Air (2 cores, 8 GB RAM).
+
+backend:
+  host: 127.0.0.1        # never change to 0.0.0.0
+  port: 8765
+  log_file: data/logs/backend.log
+
+ollama:
+  url: http://127.0.0.1:11434
+  model: qwen2.5:1.5b    # starting point, benchmark in phase 1
+  keep_alive: 5m         # unload the model after 5 idle minutes
+  num_ctx: 2048
+  max_loaded_models: 1
+  num_parallel: 1
+
+voice:
+  enabled: false
+  whisper:
+    binary: reference/whisper.cpp/build/bin/whisper-cli
+    model: models/ggml-tiny.en.bin
+    threads: 2
+  piper:
+    binary: piper
+    voice: models/en_US-lessac-low.onnx
+
+browser:
+  enabled: false
+  host: 127.0.0.1
+  port: 8766
+  chrome_path: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+  profile_dir: data/chrome-profile   # dedicated profile, not the user's own
+
+automation:
+  enabled: false
+  host: 127.0.0.1
+  port: 8767             # Hammerspoon listener, must bind to localhost only
+
+safety:
+  policy_file: safety/policy.yaml
+  approval_timeout_seconds: 60       # no answer means deny
+  audit_log: true
+
+data:
+  database: data/assistant.db
