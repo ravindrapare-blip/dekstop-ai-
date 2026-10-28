@@ -30,10 +30,11 @@ def test_package_targets_monterey_with_no_dependencies():
 def test_example_config_matches_the_documented_defaults():
     example = json.loads((APP / "ui.example.json").read_text())
     assert example == {"backend_url": "http://127.0.0.1:8765", "hotkey": "cmd+shift+space",
-                       "hide_after_seconds": 20}
+                       "hide_after_seconds": 20, "speak_replies": "voice"}
     config_source = (APP / "Sources" / "CapsuleCore" / "UIConfig.swift").read_text()
     assert 'URL(string: "http://127.0.0.1:8765")' in config_source
     assert "hideAfterSeconds: 20" in config_source
+    assert "speakReplies: .voiceOnly" in config_source
 
 
 def test_default_backend_port_matches_the_python_config():
@@ -80,3 +81,30 @@ def test_the_ui_never_imports_the_backend_code_or_runs_commands():
     # only the core module touches the network
     for path in (APP / "Sources" / "AssistantApp").glob("*.swift"):
         assert "URLSession" not in path.read_text(), path.name
+
+
+def test_the_voice_pipeline_pieces_are_split_between_core_and_app():
+    core = APP / "Sources" / "CapsuleCore"
+    appdir = APP / "Sources" / "AssistantApp"
+    # AVFoundation (microphone and speakers) lives only in the app target, so the core builds anywhere
+    for path in core.glob("*.swift"):
+        assert "import AVFoundation" not in path.read_text(), path.name
+    assert "AVAudioRecorder" in (appdir / "MicRecorder.swift").read_text()
+    assert "AVAudioPlayer" in (appdir / "AudioPlayer.swift").read_text()
+    recorder = (appdir / "MicRecorder.swift").read_text()
+    for setting in ("16_000", "AVNumberOfChannelsKey: 1", "AVLinearPCMBitDepthKey: 16"):
+        assert setting in recorder            # what whisper.cpp needs
+    assert "removeItem" in recorder           # the recording is deleted after use
+
+
+def test_the_app_asks_macos_for_microphone_access_with_a_clear_reason():
+    import plistlib
+    info = plistlib.loads((APP / "Resources" / "Info.plist").read_bytes())
+    text = info["NSMicrophoneUsageDescription"]
+    assert "microphone button" in text and "on this Mac" in text
+
+
+def test_voice_audio_settings_match_the_backend():
+    from voice.audio import SAMPLE_RATE
+    assert SAMPLE_RATE == 16_000
+    assert "16 kHz" in (ROOT / "app" / "Sources" / "CapsuleCore" / "Ports.swift").read_text()

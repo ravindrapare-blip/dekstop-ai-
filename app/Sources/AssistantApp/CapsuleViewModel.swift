@@ -57,8 +57,10 @@ final class CapsuleViewModel: ObservableObject {
             controller.confirm(approved: false)
         } else if state.phase == .thinking {
             controller.cancel()
-        } else if state.phase == .listening {
-            controller.toggleMic()
+        } else if state.phase == .listening || state.phase == .transcribing {
+            controller.cancelVoice()
+        } else if state.phase == .speaking {
+            controller.stopSpeaking()
         } else if !input.isEmpty {
             input = ""
             relayout()

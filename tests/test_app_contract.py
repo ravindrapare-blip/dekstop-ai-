@@ -14,6 +14,8 @@ from backend.config import ROOT
 from backend.llm import OllamaClient
 from backend.main import create_app
 from safety import GuardrailManager, Policy
+from test_voice import FakeEngine, make_wav
+from voice import VoiceError, VoiceService
 
 FIXTURES = ROOT / "app" / "Tests" / "Fixtures"
 POLICY = Policy.load(ROOT / "safety" / "policy.yaml")
@@ -24,7 +26,7 @@ def tool_json(tool, **args):
     return json.dumps({"tool": tool, "args": args, "requires_confirmation": False})
 
 
-def client_for(model_output, ollama_down=False):
+def client_for(model_output, ollama_down=False, voice=None):
     def handler(request: httpx.Request) -> httpx.Response:
         if ollama_down:
             raise httpx.ConnectError("refused", request=request)
@@ -34,7 +36,7 @@ def client_for(model_output, ollama_down=False):
 
     llm = OllamaClient("http://127.0.0.1:11434", "m", transport=httpx.MockTransport(handler))
     cfg = {"ollama": {}, "router": {"max_retries": 0}}
-    return TestClient(create_app(cfg, llm, guard=GuardrailManager(POLICY)))
+    return TestClient(create_app(cfg, llm, guard=GuardrailManager(POLICY), voice=voice))
 
 
 def normalize(body):
@@ -72,6 +74,18 @@ def scenarios():
         res = c.post("/route", json={"text": "hi"})
         assert res.status_code == 503
         out["error_503"] = res.json()
+    heard = VoiceService(FakeEngine("stt", wav=b"open chrome"), [FakeEngine("Piper", wav=make_wav(0.2))])
+    with client_for("", voice=heard) as c:
+        out["voice_transcribe"] = c.post("/voice/transcribe", content=make_wav(1.0)).json()
+    silent = VoiceService(FakeEngine("stt", wav=b""), [])
+    with client_for("", voice=silent) as c:
+        out["voice_transcribe_empty"] = c.post("/voice/transcribe", content=make_wav(1.0)).json()
+    broken = VoiceService(
+        FakeEngine("stt", error=VoiceError("model_missing", "The speech model is missing.", "Download one.")), [])
+    with client_for("", voice=broken) as c:
+        res = c.post("/voice/transcribe", content=make_wav(1.0))
+        assert res.status_code == 503
+        out["voice_error_503"] = res.json()
     return {name: normalize(body) for name, body in out.items()}
 
 
@@ -98,6 +112,9 @@ def test_the_fields_the_app_decodes_are_present():
     for name, body in scenarios().items():
         if name == "error_503":
             assert set(body) == {"detail"}
+            continue
+        if name.startswith("voice_"):
+            assert set(body) in ({"text"}, {"detail", "code"}), name
             continue
         decision = body["guard"] if name.startswith("route_") else body
         if name.startswith("route_"):

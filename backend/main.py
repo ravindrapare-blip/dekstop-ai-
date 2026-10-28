@@ -3,7 +3,9 @@ import logging
 from contextlib import asynccontextmanager
 
 import uvicorn
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from backend.config import ROOT, load_config
@@ -12,8 +14,16 @@ from backend.router import MAX_INPUT_CHARS, Router
 from backend.startup import all_ok, run_checks
 from backend.tool_defs import build_registry
 from safety import AuditLog, GuardrailManager, Policy
+from voice import VoiceError, VoiceService, voice_service_from_config
+from voice.audio import MAX_AUDIO_BYTES
 
-PHASE = 2
+PHASE = 4
+
+# How each speech problem is reported over HTTP.
+VOICE_STATUS = {
+    "disabled": 503, "engine_missing": 503, "model_missing": 503,
+    "failed": 502, "timeout": 502, "bad_audio": 400, "bad_text": 400, "too_large": 413,
+}
 LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
 
 log = logging.getLogger("assistant.backend")
@@ -22,6 +32,10 @@ log = logging.getLogger("assistant.backend")
 class RouteRequest(BaseModel):
     text: str = Field(min_length=1, max_length=MAX_INPUT_CHARS)
     dry_run: bool | None = None  # None uses safety.dry_run from config.yaml
+
+
+class SpeakRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=2000)
 
 
 class ConfirmRequest(BaseModel):
@@ -51,12 +65,23 @@ def build_guard(cfg: dict) -> GuardrailManager:
     )
 
 
+def voice_error(error: VoiceError) -> JSONResponse:
+    return JSONResponse(
+        status_code=VOICE_STATUS.get(error.code, 500),
+        content={"detail": error.detail, "code": error.code},
+    )
+
+
 def create_app(
-    cfg: dict | None = None, llm: OllamaClient | None = None, guard: GuardrailManager | None = None
+    cfg: dict | None = None,
+    llm: OllamaClient | None = None,
+    guard: GuardrailManager | None = None,
+    voice: VoiceService | None = None,
 ) -> FastAPI:
     cfg = cfg or load_config()
     llm = llm or client_from_config(cfg)
     guard = guard or build_guard(cfg)
+    voice = voice or voice_service_from_config(cfg, ROOT)
     registry = build_registry()
     unruled = sorted(t.name for t in registry.all() if t.name not in guard.policy.rules)
     if unruled:
@@ -112,6 +137,32 @@ def create_app(
         return guard.confirm(
             req.confirmation_id, req.approved, acknowledge_risk=req.acknowledge_risk
         ).to_dict()
+
+    # Speech. The app records the microphone (it owns the permission) and plays the replies;
+    # these endpoints only convert. A transcript still goes through /route and the safety layer.
+    @app.get("/voice/status")
+    def voice_status() -> dict:
+        return voice.status()
+
+    @app.post("/voice/transcribe", response_model=None)
+    async def voice_transcribe(request: Request):
+        declared = request.headers.get("content-length", "")
+        if declared.isdigit() and int(declared) > MAX_AUDIO_BYTES:
+            return voice_error(VoiceError("too_large", "That recording is too large."))
+        body = await request.body()
+        try:
+            text = await run_in_threadpool(voice.transcribe, body)
+        except VoiceError as e:
+            return voice_error(e)
+        return {"text": text}
+
+    @app.post("/voice/speak", response_model=None)
+    async def voice_speak(req: SpeakRequest):
+        try:
+            wav = await run_in_threadpool(voice.speak, req.text)
+        except VoiceError as e:
+            return voice_error(e)
+        return Response(content=wav, media_type="audio/wav")
 
     return app
 

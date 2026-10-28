@@ -2,17 +2,19 @@ import Foundation
 
 public enum Phase: Equatable {
     case idle
-    case listening
-    case thinking
-    case waiting      // waiting for the user to confirm or cancel
+    case listening     // the microphone is recording
+    case transcribing  // the recording is being turned into text
+    case thinking      // the local model is working on the request
+    case waiting       // waiting for the user to confirm or cancel
     case executing
     case done
+    case speaking      // a finished result is being read aloud
     case error
 
     /// While busy the window must not auto-hide, and new requests are ignored.
     public var isBusy: Bool {
         switch self {
-        case .listening, .thinking, .waiting, .executing: return true
+        case .listening, .transcribing, .thinking, .waiting, .executing, .speaking: return true
         case .idle, .done, .error: return false
         }
     }
@@ -55,10 +57,12 @@ public struct CapsuleState: Equatable {
         switch phase {
         case .idle: return "Ask me to do something…"
         case .listening: return "Listening…"
+        case .transcribing: return "Transcribing…"
         case .thinking: return "Thinking…"
         case .waiting: return "Waiting for your answer…"
         case .executing: return "Working on it…"
         case .done: return "Anything else?"
+        case .speaking: return "Speaking…"
         case .error: return "Something went wrong"
         }
     }
@@ -66,8 +70,12 @@ public struct CapsuleState: Equatable {
 
 public enum Event: Equatable {
     case started                                       // a request was sent
-    case listening
-    case listeningEnded
+    case listening                                     // the microphone started
+    case transcribing                                  // recording ended, speech is being converted
+    case voiceCancelled                                // recording or transcription was abandoned
+    case speaking                                      // a result is being read aloud
+    case speechEnded
+    case speechFailed(String)                          // a short reason, shown beside the last action
     case notice(String, Tone)                          // a message with no request, e.g. voice unavailable
     case waiting(PendingConfirmation)
     case executing(String)                             // label of the action being run
@@ -89,8 +97,20 @@ public func reduce(_ state: CapsuleState, _ event: Event) -> CapsuleState {
         s.phase = .listening
         s.tone = .neutral
         s.message = ""
-    case .listeningEnded:
-        if s.phase == .listening { s.phase = .idle }
+    case .transcribing:
+        if s.phase == .listening { s.phase = .transcribing }
+    case .voiceCancelled:
+        if s.phase == .listening || s.phase == .transcribing { s.phase = .idle }
+    case .speaking:
+        // Only a finished result is read aloud; its text, tone and last action stay on screen.
+        if s.phase == .done { s.phase = .speaking }
+    case .speechEnded:
+        if s.phase == .speaking { s.phase = .done }
+    case .speechFailed(let reason):
+        if s.phase == .speaking {
+            s.phase = .done
+            s.lastAction = s.lastAction.isEmpty ? reason : "\(s.lastAction) · \(reason)"
+        }
     case .notice(let text, let tone):
         s.phase = .idle
         s.tone = tone

@@ -22,11 +22,13 @@ The backend must be running (`scripts/start.sh` from the project root). If it is
 | State | Look | Meaning |
 |---|---|---|
 | ready | grey dot, chips under the box | idle |
-| listening | red dot, filled mic | voice input is on |
+| listening | red dot, filled mic | recording; tap the mic again to send |
+| transcribing | spinner | the recording is being turned into text |
 | thinking | spinner | the local model is working |
 | waiting | orange dot, Confirm / Cancel buttons | the safety layer wants your answer |
 | working | spinner | an authorized action is running |
 | done | green or orange dot, result text | finished, or refused |
+| speaking | speaker icon | the result is being read aloud; Esc stops it |
 | error | red dot | something failed, with a plain explanation |
 
 "Last: ..." under the box names the previous action. Chips: Open App, Open File, Search Chrome, Play Media, Set Reminder fill the box so you can finish the sentence. Organize Desktop sends right away (it will still ask before moving anything).
@@ -42,6 +44,7 @@ Copy `ui.example.json` to `~/Library/Application Support/LocalAssistant/ui.json`
 | `backend_url` | `http://127.0.0.1:8765` | must be an `http` address on this Mac; anything else is ignored |
 | `hotkey` | `cmd+shift+space` | modifiers (`cmd`, `shift`, `opt`, `ctrl`) plus one letter, digit or `space` |
 | `hide_after_seconds` | `20` | `0` turns auto-hide off; otherwise 3 to 600 |
+| `speak_replies` | `voice` | `voice` reads replies aloud only for spoken requests, `always`, or `never` |
 
 Bad values fall back to the default and the capsule shows a warning at launch. If another app already owns the shortcut, the menu bar item still works.
 
@@ -53,19 +56,27 @@ Sources/CapsuleCore/   all the logic, Foundation only, unit tested
   CapsuleState         the states and the pure function that moves between them
   Planning             turns a backend decision into one step; never trusts an inconsistent answer
   BackendClient        the only network code; loopback addresses only
-  Ports                VoiceInput and ActionRunner interfaces, with "unavailable" stand-ins
+  VoiceInput, Speech   microphone and speaker logic: silence detection, permissions, backend calls
+  Ports                the interfaces for microphone, speaker, voice and actions, with stand-ins
   CapsuleLayout, IdlePolicy, Hotkey, Suggestions, UIConfig, Models
-Sources/AssistantApp/  thin AppKit and SwiftUI layer: window, view, shortcut, menu bar item
+Sources/AssistantApp/  thin AppKit and SwiftUI layer: window, view, shortcut, menu bar item,
+                       MicRecorder and AudioPlayer (AVFoundation)
 Tests/                 unit tests, plus JSON fixtures captured from the real backend
 ```
 
 The UI contains no rules. It sends text to `/route`, shows what the safety layer decided, and sends your Confirm or Cancel to `/confirm`. It only hands an action to the runner when the backend says `authorized: true`.
 
+## Voice
+
+The mic button records, transcribes with whisper.cpp through the backend, and sends the words like a typed request. Replies to spoken requests are read aloud (Piper, or the Mac voice). Setup, permission, privacy and troubleshooting are in `../docs/voice.md`. If voice fails for any reason the capsule says why and you type instead.
+
+Voice needs the engines installed on the Mac (`scripts/voice_check.py` tells you what is missing).
+
 ## Not connected yet
 
-- **Voice:** the mic button reports "Voice input isn't set up yet" and moves focus to the text box. Phase 4 supplies a real `VoiceInput`.
 - **Running actions:** authorized actions go to a runner that says "nothing was done". Phase 5 onward supplies a real `ActionRunner`. The capsule never claims an action happened when it didn't.
 - **Play Media** has no matching tool yet, so the assistant will answer that it can't.
+- **Answering confirmations by voice:** you still click Confirm or Cancel.
 
 ## Low resource use
 
@@ -81,8 +92,9 @@ These need a real Mac and could not be tested where this was written:
 4. Type, press Return: "Thinking…", then an answer. With the backend stopped you get the "start it with scripts/start.sh" message.
 5. Ask it to quit Safari: Confirm / Cancel appear. Cancel says "Cancelled".
 6. Click a chip: text appears in the box with the cursor at the end, ready to type.
-7. Mic button: shows the "isn't set up yet" message.
+7. Mic button, before voice is set up: shows a clear message and moves to the text box. After setup (`../docs/voice.md`): macOS asks for the microphone, you speak, tap again, and it answers; the reply is read aloud.
 8. With `hide_after_seconds` set to 5, the pill hides itself after 5 idle seconds, but not while it is thinking.
 9. After hiding with Cmd+Shift+Space, keyboard focus returns to the app you were using.
+10. Voice: deny the microphone prompt once and check the message; hide the pill while listening and confirm the recording stops; press Esc while it speaks and confirm it stops.
 
 Send me the first thing that doesn't match and I'll fix it.

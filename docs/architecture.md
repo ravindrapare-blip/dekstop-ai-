@@ -1,6 +1,6 @@
 # Architecture
 
-Status: **Phases 0-3 done** (runtime, tool calling, safety layer, capsule UI). See `docs/tools.md`, `safety/README.md` and `app/README.md`. Later components are still design only.
+Status: **Phases 0-4 done** (runtime, tool calling, safety layer, capsule UI, voice). See `docs/tools.md`, `safety/README.md`, `app/README.md` and `docs/voice.md`. Later components are still design only.
 
 ## 1. Goals and constraints
 
@@ -18,7 +18,7 @@ A local-first desktop assistant for a **2017 MacBook Air (Intel, dual-core, no G
 | `app/` | SwiftUI (AppKit window shell) | long-running, tiny | Floating UI: text input, mic button, status, approval prompts |
 | `backend/` | Python 3.10+, FastAPI | long-running | Orchestrator: request loop, LLM calls, tool dispatch, SQLite |
 | `safety/` | Python package, YAML policy | in-process in backend | Classifies every action, gates approval, writes the audit log |
-| `voice/` | Python wrappers | child processes, on demand | Runs `whisper.cpp` (STT) and `piper` (TTS) as subprocesses |
+| `voice/` | Python wrappers | child processes, on demand | Runs `whisper.cpp` (STT) and `piper` or `say` (TTS). The app records and plays; this only converts |
 | `browser/` | Node.js, `puppeteer-core` | worker, started on demand | Drives the user's existing Chrome through a fixed set of actions |
 | `automation/` | Hammerspoon (Lua) | Hammerspoon itself | Executes a fixed set of named macOS actions |
 | `data/` | SQLite, JSON lines | files | Reminders, tasks, notes, memory (SQLite); audit log (`audit.jsonl`) |
@@ -53,12 +53,12 @@ Rules that keep this modular:
 
 ## 3. Request flow
 
-1. User types or speaks. For voice, the backend runs `whisper.cpp` on a recorded WAV and gets text.
+1. User types or speaks. For voice, the app records a WAV, the backend runs `whisper.cpp` on it, and the text continues as if it had been typed.
 2. Backend sends the text, a short system prompt, recent memory and the **tool list** to Ollama.
 3. The model replies with text or a **structured action proposal** (JSON: tool name + arguments).
 4. The proposal goes to `safety/`: schema check, tool registry check, risk classification.
 5. Depending on the risk tier, the action runs, runs and is logged, waits for approval in the UI, or is refused.
-6. The result goes back to the model for a short final answer. If voice is on, `piper` speaks it.
+6. The result is shown. For a spoken request the backend turns it into speech with `piper` (or the Mac voice) and the app plays it.
 
 The model never executes anything itself. It only proposes actions from a fixed registry.
 

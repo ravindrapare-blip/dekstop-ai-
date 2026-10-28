@@ -54,7 +54,7 @@ struct CapsuleView: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .help("Speak a request")
+            .help("Tap to speak, tap again to send")
             .accessibilityLabel("Microphone")
         }
         .frame(height: CGFloat(CapsuleLayout.inputRow))
@@ -145,10 +145,14 @@ private struct StatusIndicator: View {
 
     var body: some View {
         Group {
-            if phase == .thinking || phase == .executing {
+            if phase == .thinking || phase == .executing || phase == .transcribing {
                 ProgressView()
                     .controlSize(.small)
                     .scaleEffect(0.7)
+            } else if phase == .speaking {
+                Image(systemName: "speaker.wave.2.fill")
+                    .font(.system(size: 12))
+                    .foregroundColor(Color(red: 0.45, green: 0.70, blue: 1.0))
             } else {
                 Circle()
                     .fill(dotColor)
@@ -167,7 +171,7 @@ private struct StatusIndicator: View {
         case .done:
             return tone == .success ? Color.green : (tone == .warning ? Color.orange : Color.white.opacity(0.7))
         case .error: return Color.red
-        case .thinking, .executing: return Color.clear
+        case .thinking, .executing, .transcribing, .speaking: return Color.clear
         }
     }
 
@@ -175,6 +179,8 @@ private struct StatusIndicator: View {
         switch phase {
         case .idle: return "Ready"
         case .listening: return "Listening"
+        case .transcribing: return "Transcribing"
+        case .speaking: return "Speaking"
         case .thinking: return "Thinking"
         case .waiting: return "Waiting for your answer"
         case .executing: return "Working"

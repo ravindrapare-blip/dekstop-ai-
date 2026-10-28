@@ -98,4 +98,56 @@ final class BackendClientTests: XCTestCase {
         XCTAssertFalse(wrongStatusResult)
         XCTAssertFalse(downResult)
     }
+
+    // MARK: - voice
+
+    func testTranscribeSendsTheAudioAndReturnsTheWords() async throws {
+        let transport = FakeTransport.serving(["/voice/transcribe": "voice_transcribe"])
+        let audio = Data([0x52, 0x49, 0x46, 0x46, 1, 2, 3])
+        let text = try await makeClient(transport).transcribe(wav: audio)
+        XCTAssertEqual(text, "open chrome")
+        let request = try XCTUnwrap(transport.requests.first)
+        XCTAssertEqual(request.url?.absoluteString, "http://127.0.0.1:8765/voice/transcribe")
+        XCTAssertEqual(request.httpMethod, "POST")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Content-Type"), "audio/wav")
+        XCTAssertEqual(request.httpBody, audio)
+    }
+
+    func testSilenceTranscribesToAnEmptyString() async throws {
+        let transport = FakeTransport.serving(["/voice/transcribe": "voice_transcribe_empty"])
+        let text = try await makeClient(transport).transcribe(wav: Data([1]))
+        XCTAssertEqual(text, "")
+    }
+
+    func testTranscribeErrorsCarryTheBackendsExplanation() async throws {
+        let transport = FakeTransport.serving(["/voice/transcribe": "voice_error_503"], status: ["/voice/transcribe": 503])
+        let error = await thrownError(try await makeClient(transport).transcribe(wav: Data([1])))
+        XCTAssertEqual(error as? BackendError, .server(status: 503, detail: "The speech model is missing. Download one."))
+    }
+
+    func testSpeakSendsTheTextAndReturnsTheAudio() async throws {
+        let reply = Data([9, 8, 7, 6])
+        let transport = FakeTransport { _ in (reply, 200) }
+        let audio = try await makeClient(transport).speak(text: "Opened Google Chrome.")
+        XCTAssertEqual(audio, reply)
+        let request = try XCTUnwrap(transport.requests.first)
+        XCTAssertEqual(request.url?.absoluteString, "http://127.0.0.1:8765/voice/speak")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Content-Type"), "application/json")
+        XCTAssertEqual(transport.body(of: request)["text"] as? String, "Opened Google Chrome.")
+    }
+
+    func testSpeakWithNoAudioIsABadResponse() async throws {
+        let client = try makeClient(FakeTransport { _ in (Data(), 200) })
+        let error = await thrownError(try await client.speak(text: "hi"))
+        XCTAssertEqual(error as? BackendError, .badResponse)
+    }
+
+    func testSpeakErrorsAreMapped() async throws {
+        let unavailable = try makeClient(FakeTransport { _ in (Data(#"{"detail":"Piper is not installed."}"#.utf8), 503) })
+        let error = await thrownError(try await unavailable.speak(text: "hi"))
+        XCTAssertEqual(error as? BackendError, .server(status: 503, detail: "Piper is not installed."))
+        let down = try makeClient(FakeTransport { _ in throw URLError(.cannotConnectToHost) })
+        let downError = await thrownError(try await down.speak(text: "hi"))
+        XCTAssertEqual(downError as? BackendError, .unreachable)
+    }
 }

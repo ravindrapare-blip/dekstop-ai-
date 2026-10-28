@@ -2,6 +2,9 @@ import Foundation
 
 /// Connects typed or spoken requests to the backend and keeps the capsule's state.
 /// It has no UI code. The window observes `onChange` and sends user actions to these methods.
+///
+/// A spoken request follows the same path as a typed one, so the safety layer sees both the same way:
+///   mic -> recording -> transcript -> /route -> safety decision -> (confirm) -> run -> spoken reply
 @MainActor
 public final class CapsuleController {
     public static let maxInputLength = 1000   // the backend rejects longer text
@@ -17,14 +20,26 @@ public final class CapsuleController {
 
     private let client: BackendClient
     private let voice: VoiceInput
+    private let speech: SpeechOutput
     private let runner: ActionRunner
+    private let speakMode: SpeakMode
     private var task: Task<Void, Never>?
-    private var requestID = 0   // answers to older requests are ignored
+    private var requestID = 0              // answers to older requests are ignored
+    private var speechID = 0               // so are old speech events
+    private var lastRequestWasSpoken = false
 
-    public init(client: BackendClient, voice: VoiceInput, runner: ActionRunner) {
+    public init(
+        client: BackendClient,
+        voice: VoiceInput,
+        runner: ActionRunner,
+        speech: SpeechOutput = UnavailableSpeech(),
+        speakMode: SpeakMode = .voiceOnly
+    ) {
         self.client = client
         self.voice = voice
         self.runner = runner
+        self.speech = speech
+        self.speakMode = speakMode
     }
 
     // MARK: - User actions
@@ -32,21 +47,7 @@ public final class CapsuleController {
     /// Returns true if the request was sent.
     @discardableResult
     public func submit(_ rawText: String) -> Bool {
-        let text = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return false }
-        guard text.unicodeScalars.count <= Self.maxInputLength else {
-            apply(.notice("That's too long. Please keep it under \(Self.maxInputLength) characters.", .warning))
-            return false
-        }
-        guard state.phase != .thinking, state.phase != .executing else { return false }
-
-        if state.phase == .listening { voice.stop() }
-        if let pending = state.pending { discard(pending) }
-        apply(.started)
-        requestID += 1
-        let id = requestID
-        task = Task { [weak self] in await self?.route(text, id: id) }
-        return true
+        submit(rawText, spoken: false)
     }
 
     /// Answer a confirmation request. A high-risk request needs `acknowledgeRisk` to be approved.
@@ -77,13 +78,21 @@ public final class CapsuleController {
         apply(.finished(message: "Cancelled.", tone: .neutral, lastAction: "cancelled"))
     }
 
+    /// The microphone button. Tap to start, tap again to send what you said.
     public func toggleMic() {
-        if state.phase == .listening {
-            voice.stop()
-            apply(.listeningEnded)
+        switch state.phase {
+        case .listening:
+            voice.stop()               // a transcript or a failure always follows
+            apply(.transcribing)
             return
+        case .speaking:
+            stopSpeaking()             // the mic interrupts a spoken reply, then listens
+        case .transcribing, .thinking, .waiting, .executing:
+            return
+        case .idle, .done, .error:
+            break
         }
-        guard !state.phase.isBusy else { return }
+
         guard voice.isAvailable else {
             apply(.notice(voice.unavailableReason, .warning))
             onFocusRequest?()
@@ -95,8 +104,25 @@ public final class CapsuleController {
         }
     }
 
-    /// Call when the window is hidden.
+    /// Escape while listening or transcribing: throw the recording away.
+    public func cancelVoice() {
+        guard state.phase == .listening || state.phase == .transcribing else { return }
+        voice.cancel()
+        apply(.voiceCancelled)
+    }
+
+    /// Stops a reply that is being read aloud.
+    public func stopSpeaking() {
+        guard state.phase == .speaking else { return }
+        speechID += 1
+        speech.stop()
+        apply(.speechEnded)
+    }
+
+    /// Call when the window is hidden. Nothing keeps recording or talking behind a hidden window.
     public func dismissed() {
+        cancelVoice()
+        stopSpeaking()
         apply(.dismissed)
     }
 
@@ -117,17 +143,39 @@ public final class CapsuleController {
         }
     }
 
-    // MARK: - Internals
+    // MARK: - Requests
 
-    private func apply(_ event: Event) {
-        state = reduce(state, event)
+    private func submit(_ rawText: String, spoken: Bool) -> Bool {
+        let text = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return false }
+        guard text.unicodeScalars.count <= Self.maxInputLength else {
+            apply(.notice("That's too long. Please keep it under \(Self.maxInputLength) characters.", .warning))
+            return false
+        }
+        // A transcript arrives while the phase is listening or transcribing. A typed request must wait
+        // for those, and for work already in progress.
+        let phase = state.phase
+        if phase == .thinking || phase == .executing { return false }
+        if !spoken && phase == .transcribing { return false }
+
+        if !spoken && phase == .listening { voice.cancel() }
+        stopSpeaking()
+        if let pending = state.pending { discard(pending) }
+        lastRequestWasSpoken = spoken
+        apply(.started)
+        requestID += 1
+        let id = requestID
+        task = Task { [weak self] in await self?.route(text, id: id) }
+        return true
     }
 
     private func handleVoice(_ event: VoiceEvent) {
-        guard state.phase == .listening else { return }   // late events are ignored
+        guard state.phase == .listening || state.phase == .transcribing else { return }   // late events are ignored
         switch event {
+        case .processing:
+            apply(.transcribing)
         case .transcript(let text):
-            if !submit(text) && state.phase == .listening {
+            if !submit(text, spoken: true) && (state.phase == .listening || state.phase == .transcribing) {
                 apply(.notice("I didn't catch that. Please try again or type your request.", .warning))
                 onFocusRequest?()
             }
@@ -166,25 +214,25 @@ public final class CapsuleController {
     private func perform(_ step: Step, id: Int) async {
         switch step {
         case .reply(let text):
-            apply(.finished(message: text, tone: .neutral, lastAction: "reply"))
+            finish(text, tone: .neutral, lastAction: "reply")
         case .run(let action):
             apply(.executing(action.summary))
             let result = await runner.run(action)
             guard id == requestID else { return }
             switch result {
             case .completed(let text):
-                apply(.finished(message: text, tone: .success, lastAction: action.summary))
+                finish(text, tone: .success, lastAction: action.summary)
             case .notAvailable(let text):
-                apply(.finished(message: text, tone: .warning, lastAction: "\(action.summary) (not run)"))
+                finish(text, tone: .warning, lastAction: "\(action.summary) (not run)")
             case .failed(let text):
-                apply(.finished(message: text, tone: .error, lastAction: "\(action.summary) (failed)"))
+                finish(text, tone: .error, lastAction: "\(action.summary) (failed)")
             }
         case .ask(let pending):
-            apply(.waiting(pending))
+            apply(.waiting(pending))    // answered with the buttons, so it is not read aloud
         case .refuse(let text):
-            apply(.finished(message: text, tone: .warning, lastAction: "blocked"))
+            finish(text, tone: .warning, lastAction: "blocked")
         case .preview(let text):
-            apply(.finished(message: text, tone: .neutral, lastAction: nil))
+            finish(text, tone: .neutral, lastAction: nil)
         case .invalid(let text):
             apply(.failed(text))
         }
@@ -193,6 +241,40 @@ public final class CapsuleController {
     private func discard(_ pending: PendingConfirmation) {
         let client = self.client
         Task { _ = try? await client.confirm(id: pending.id, approved: false, acknowledgeRisk: false) }
+    }
+
+    // MARK: - State and speech
+
+    private func apply(_ event: Event) {
+        state = reduce(state, event)
+    }
+
+    /// Shows a result and, if wanted, reads it aloud.
+    private func finish(_ message: String, tone: Tone, lastAction: String?) {
+        apply(.finished(message: message, tone: tone, lastAction: lastAction))
+        speakIfWanted(message)
+    }
+
+    private func speakIfWanted(_ message: String) {
+        guard speech.isAvailable, speakMode != .never else { return }
+        guard speakMode == .always || lastRequestWasSpoken else { return }
+        let text = SpokenText.make(from: message)
+        guard !text.isEmpty else { return }
+
+        speechID += 1
+        let id = speechID
+        apply(.speaking)
+        speech.speak(text) { [weak self] event in
+            Task { @MainActor in self?.handleSpeech(event, id: id) }
+        }
+    }
+
+    private func handleSpeech(_ event: SpeechEvent, id: Int) {
+        guard id == speechID, state.phase == .speaking else { return }
+        switch event {
+        case .finished: apply(.speechEnded)
+        case .failed(let reason): apply(.speechFailed(reason))
+        }
     }
 
     static func describe(_ error: Error) -> String {

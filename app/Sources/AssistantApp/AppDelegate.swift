@@ -24,8 +24,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         controller = CapsuleController(
             client: client,
-            voice: UnavailableVoiceInput(),   // replaced in phase 4
-            runner: UnavailableRunner()       // replaced in phase 5
+            voice: LocalVoiceInput(client: client, recorder: MicRecorder()),
+            runner: UnavailableRunner(),      // replaced in phase 5
+            speech: LocalSpeech(client: client, player: AudioPlayer()),
+            speakMode: config.speakReplies
         )
         viewModel = CapsuleViewModel(controller: controller)
         panelController = PanelController(

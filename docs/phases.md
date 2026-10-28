@@ -6,7 +6,7 @@
 | 1 | Ollama runtime, tool registry, JSON tool calling, startup checks, validation scripts | done |
 | 2 | Safety layer: guardrail manager, risk levels, confirmation flow, dry-run | done |
 | 3 | Floating capsule UI (SwiftUI) | done, needs first-run check on a Mac (`app/README.md`) |
-| 4 | Local voice input and output (whisper.cpp, Piper) | |
+| 4 | Local voice input and output (whisper.cpp, Piper) | done, needs engines installed and a first-run check on a Mac (`docs/voice.md`) |
 | 5 | macOS app and file control (Hammerspoon, AppleScript) | |
 | 6 | Browser automation (Puppeteer) | |
 | 7 | Reminders, tasks, notes, local memory (SQLite) | |

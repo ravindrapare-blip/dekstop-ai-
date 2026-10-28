@@ -19,9 +19,11 @@ final class FakeVoice: VoiceInput {
     var unavailableReason = "Voice is off."
     private(set) var started = 0
     private(set) var stopped = 0
+    private(set) var cancelled = 0
     private var callback: ((VoiceEvent) -> Void)?
     func start(onEvent: @escaping (VoiceEvent) -> Void) { started += 1; callback = onEvent }
     func stop() { stopped += 1 }
+    func cancel() { cancelled += 1 }
     func emit(_ event: VoiceEvent) { callback?(event) }
 }
 
@@ -30,9 +32,11 @@ final class ControllerTests: XCTestCase {
     private func make(
         _ transport: FakeTransport,
         runner: ActionRunner = RecordingRunner(),
-        voice: VoiceInput = UnavailableVoiceInput()
+        voice: VoiceInput = UnavailableVoiceInput(),
+        speech: SpeechOutput = UnavailableSpeech(),
+        mode: SpeakMode = .voiceOnly
     ) throws -> CapsuleController {
-        CapsuleController(client: try makeClient(transport), voice: voice, runner: runner)
+        CapsuleController(client: try makeClient(transport), voice: voice, runner: runner, speech: speech, speakMode: mode)
     }
 
     private func settle(_ c: CapsuleController) async {
@@ -310,7 +314,7 @@ final class ControllerTests: XCTestCase {
 
         voice.emit(.transcript("open chrome"))
         await waitUntil { c.state.phase == .done }
-        XCTAssertEqual(voice.stopped, 1)
+        XCTAssertEqual(voice.stopped, 0)   // the recording had already ended
         let body = transport.body(of: try XCTUnwrap(transport.requests(to: "/route").first))
         XCTAssertEqual(body["text"] as? String, "open chrome")
     }
@@ -339,21 +343,24 @@ final class ControllerTests: XCTestCase {
         XCTAssertTrue(c.state.message.contains("didn't catch"))
     }
 
-    func testTappingTheMicAgainStopsListening() throws {
+    func testTappingTheMicAgainSendsWhatWasSaid() throws {
         let voice = FakeVoice()
         let c = try make(.serving([:]), voice: voice)
         c.toggleMic()
         c.toggleMic()
-        XCTAssertEqual(c.state.phase, .idle)
+        XCTAssertEqual(c.state.phase, .transcribing)   // waiting for the transcript
         XCTAssertEqual(voice.stopped, 1)
+        XCTAssertEqual(voice.cancelled, 0)
     }
 
-    func testLateVoiceEventsAreIgnored() async throws {
+    func testLateVoiceEventsAfterCancellingAreIgnored() async throws {
         let voice = FakeVoice()
         let transport = FakeTransport.serving(["/route": "route_reply"])
         let c = try make(transport, voice: voice)
         c.toggleMic()
-        c.toggleMic()   // stopped
+        c.cancelVoice()
+        XCTAssertEqual(voice.cancelled, 1)
+        XCTAssertEqual(c.state.phase, .idle)
         voice.emit(.transcript("too late"))
         try await Task.sleep(nanoseconds: 50_000_000)
         XCTAssertTrue(transport.requests.isEmpty)
@@ -407,5 +414,224 @@ final class ControllerTests: XCTestCase {
         c.notice("hello", tone: .warning)
         XCTAssertEqual(c.state.phase, .thinking)
         c.cancel()
+    }
+
+    // MARK: - the voice pipeline
+
+    func testRecordingEndingByItselfShowsTranscribing() async throws {
+        let voice = FakeVoice()
+        let c = try make(.serving([:]), voice: voice)
+        c.toggleMic()
+        voice.emit(.processing)
+        await waitUntil { c.state.phase == .transcribing }
+        XCTAssertEqual(c.state.phase, .transcribing)
+    }
+
+    func testFullVoicePipelineStatesAreInOrder() async throws {
+        let voice = FakeVoice()
+        let speech = FakeSpeech()
+        let c = try make(.serving(["/route": "route_allow_open_app"]),
+                         runner: RecordingRunner(result: .completed("Opened Google Chrome.")),
+                         voice: voice, speech: speech)
+        var phases: [Phase] = []
+        c.onChange = { phases.append($0.phase) }
+
+        c.toggleMic()
+        voice.emit(.processing)
+        voice.emit(.transcript("open chrome"))
+        await waitUntil { c.state.phase == .speaking }
+        XCTAssertEqual(phases, [.listening, .transcribing, .thinking, .executing, .done, .speaking])
+        XCTAssertEqual(speech.spoken, ["Opened Google Chrome."])
+
+        speech.emit(.finished)
+        await waitUntil { c.state.phase == .done }
+        XCTAssertEqual(c.state.message, "Opened Google Chrome.")
+    }
+
+    func testSpokenRequestsAreReadAloudButTypedOnesAreNot() async throws {
+        let voice = FakeVoice()
+        let speech = FakeSpeech()
+        let c = try make(.serving(["/route": "route_reply"]), voice: voice, speech: speech)
+
+        c.submit("hi")
+        await waitUntil { c.state.phase == .done }
+        XCTAssertTrue(speech.spoken.isEmpty)           // typed: silent by default
+
+        c.toggleMic()
+        voice.emit(.transcript("hi"))
+        await waitUntil { c.state.phase == .speaking }
+        XCTAssertEqual(speech.spoken, ["Hello there."])
+    }
+
+    func testSpeakModes() async throws {
+        for (mode, spokenTyped, spokenVoice) in [(SpeakMode.always, 1, 2), (.never, 0, 0), (.voiceOnly, 0, 1)] {
+            let voice = FakeVoice()
+            let speech = FakeSpeech()
+            let c = try make(.serving(["/route": "route_reply"]), voice: voice, speech: speech, mode: mode)
+            c.submit("hi")
+            await waitUntil { c.state.phase == .done || c.state.phase == .speaking }
+            XCTAssertEqual(speech.spoken.count, spokenTyped, "typed, \(mode)")
+            speech.emit(.finished)
+            await waitUntil { c.state.phase == .done }
+
+            c.toggleMic()
+            voice.emit(.transcript("hi"))
+            await waitUntil { c.state.phase == .done || c.state.phase == .speaking }
+            try await Task.sleep(nanoseconds: 20_000_000)
+            XCTAssertEqual(speech.spoken.count, spokenVoice, "voice, \(mode)")
+        }
+    }
+
+    func testConfirmationQuestionsAreAnsweredWithButtonsNotRepeatedAloud() async throws {
+        let voice = FakeVoice()
+        let speech = FakeSpeech()
+        let c = try make(.serving(["/route": "route_confirm_close_app"]), voice: voice, speech: speech)
+        c.toggleMic()
+        voice.emit(.transcript("quit safari"))
+        await waitUntil { c.state.phase == .waiting }
+        XCTAssertEqual(c.state.phase, .waiting)
+        XCTAssertTrue(speech.spoken.isEmpty)
+    }
+
+    func testRefusalsAreReadAloudToo() async throws {
+        let voice = FakeVoice()
+        let speech = FakeSpeech()
+        let c = try make(.serving(["/route": "route_block_url"]), voice: voice, speech: speech)
+        c.toggleMic()
+        voice.emit(.transcript("go there"))
+        await waitUntil { c.state.phase == .speaking }
+        XCTAssertTrue(speech.spoken.first?.hasPrefix("I can't do that") ?? false)
+    }
+
+    func testLongRepliesAreShortenedBeforeSpeaking() async throws {
+        let long = String(repeating: "word ", count: 200)
+        let body = Data(("{\"tool\":\"reply\",\"args\":{\"text\":\"\(long)\"},\"requires_confirmation\":false,\"fallback\":false,\"note\":\"\",\"attempts\":1,"
+            + "\"guard\":{\"outcome\":\"allow\",\"authorized\":true,\"risk\":\"low\",\"reason\":\"\",\"message\":\"\",\"tool\":\"reply\","
+            + "\"args\":{\"text\":\"\(long)\"},\"confirmation_id\":null,\"requires_acknowledgment\":false}}").utf8)
+        let speech = FakeSpeech()
+        let c = try make(FakeTransport { _ in (body, 200) }, speech: speech, mode: .always)
+        c.submit("hi")
+        await waitUntil { c.state.phase == .speaking }
+        XCTAssertLessThanOrEqual(speech.spoken.first?.count ?? 0, SpokenText.maxLength)
+        XCTAssertFalse((speech.spoken.first ?? "").isEmpty)
+    }
+
+    func testSpeechFailureKeepsTheResultOnScreen() async throws {
+        let voice = FakeVoice()
+        let speech = FakeSpeech()
+        let c = try make(.serving(["/route": "route_reply"]), voice: voice, speech: speech)
+        c.toggleMic()
+        voice.emit(.transcript("hi"))
+        await waitUntil { c.state.phase == .speaking }
+
+        speech.emit(.failed("couldn't speak: voice output isn't set up"))
+        await waitUntil { c.state.phase == .done }
+        XCTAssertEqual(c.state.message, "Hello there.")
+        XCTAssertTrue(c.state.lastAction.contains("couldn't speak"))
+    }
+
+    func testANewRequestInterruptsSpeech() async throws {
+        let voice = FakeVoice()
+        let speech = FakeSpeech()
+        let c = try make(.serving(["/route": "route_reply"]), voice: voice, speech: speech)
+        c.toggleMic()
+        voice.emit(.transcript("hi"))
+        await waitUntil { c.state.phase == .speaking }
+
+        XCTAssertTrue(c.submit("something else"))
+        XCTAssertEqual(speech.stopped, 1)
+        XCTAssertEqual(c.state.phase, .thinking)
+    }
+
+    func testStoppingSpeechIgnoresItsLateEvents() async throws {
+        let voice = FakeVoice()
+        let speech = FakeSpeech()
+        let c = try make(.serving(["/route": "route_reply"]), voice: voice, speech: speech)
+        c.toggleMic()
+        voice.emit(.transcript("hi"))
+        await waitUntil { c.state.phase == .speaking }
+
+        c.stopSpeaking()
+        XCTAssertEqual(c.state.phase, .done)
+        XCTAssertEqual(speech.stopped, 1)
+        speech.emit(.failed("late"))
+        try await Task.sleep(nanoseconds: 30_000_000)
+        XCTAssertEqual(c.state.phase, .done)
+        XCTAssertFalse(c.state.lastAction.contains("late"))
+    }
+
+    func testTheMicInterruptsSpeechAndStartsListening() async throws {
+        let voice = FakeVoice()
+        let speech = FakeSpeech()
+        let c = try make(.serving(["/route": "route_reply"]), voice: voice, speech: speech)
+        c.toggleMic()
+        voice.emit(.transcript("hi"))
+        await waitUntil { c.state.phase == .speaking }
+
+        c.toggleMic()
+        XCTAssertEqual(speech.stopped, 1)
+        XCTAssertEqual(c.state.phase, .listening)
+        XCTAssertEqual(voice.started, 2)
+    }
+
+    func testHidingTheWindowStopsSpeechAndRecording() async throws {
+        let voice = FakeVoice()
+        let speech = FakeSpeech()
+        let c = try make(.serving(["/route": "route_reply"]), voice: voice, speech: speech)
+
+        c.toggleMic()
+        c.dismissed()                                  // hidden while recording
+        XCTAssertEqual(voice.cancelled, 1)
+        XCTAssertEqual(c.state.phase, .idle)
+
+        c.toggleMic()
+        voice.emit(.transcript("hi"))
+        await waitUntil { c.state.phase == .speaking }
+        c.dismissed()                                  // hidden while speaking
+        XCTAssertEqual(speech.stopped, 1)
+        XCTAssertEqual(c.state.phase, .idle)
+    }
+
+    func testCancellingWhileTranscribingDiscardsTheTranscript() async throws {
+        let voice = FakeVoice()
+        let transport = FakeTransport.serving(["/route": "route_reply"])
+        let c = try make(transport, voice: voice)
+        c.toggleMic()
+        c.toggleMic()                                  // sent for transcription
+        XCTAssertEqual(c.state.phase, .transcribing)
+        c.cancelVoice()
+        XCTAssertEqual(c.state.phase, .idle)
+        voice.emit(.transcript("hello"))
+        try await Task.sleep(nanoseconds: 30_000_000)
+        XCTAssertTrue(transport.requests.isEmpty)
+    }
+
+    func testTypingWhileTranscribingIsIgnored() throws {
+        let voice = FakeVoice()
+        let c = try make(.serving([:]), voice: voice)
+        c.toggleMic()
+        c.toggleMic()
+        XCTAssertFalse(c.submit("typed"))
+        XCTAssertEqual(c.state.phase, .transcribing)
+    }
+
+    func testTypingWhileListeningDiscardsTheRecording() throws {
+        let voice = FakeVoice()
+        let c = try make(.serving(["/route": "route_reply"]), voice: voice)
+        c.toggleMic()
+        XCTAssertTrue(c.submit("typed instead"))
+        XCTAssertEqual(voice.cancelled, 1)
+        XCTAssertEqual(c.state.phase, .thinking)
+    }
+
+    func testSpokenRequestsGoThroughTheSameSafetyDecisions() async throws {
+        let voice = FakeVoice()
+        let runner = RecordingRunner()
+        let c = try make(.serving(["/route": "route_block_url"]), runner: runner, voice: voice)
+        c.toggleMic()
+        voice.emit(.transcript("go there"))
+        await waitUntil { c.state.phase == .done }
+        XCTAssertEqual(c.state.tone, .warning)
+        XCTAssertTrue(runner.actions.isEmpty)           // a spoken request is no more privileged than a typed one
     }
 }

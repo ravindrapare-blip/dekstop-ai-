@@ -2,7 +2,8 @@ import Foundation
 
 /// Settings for the capsule. Optional file: ~/Library/Application Support/LocalAssistant/ui.json
 ///
-///     {"backend_url": "http://127.0.0.1:8765", "hotkey": "cmd+shift+space", "hide_after_seconds": 20}
+///     {"backend_url": "http://127.0.0.1:8765", "hotkey": "cmd+shift+space", "hide_after_seconds": 20,
+///      "speak_replies": "voice"}
 ///
 /// Anything missing or invalid falls back to the default, with a warning shown at launch.
 public struct UIConfig: Equatable {
@@ -10,10 +11,12 @@ public struct UIConfig: Equatable {
     public var hotkey: HotkeySpec
     /// 0 turns auto-hide off.
     public var hideAfterSeconds: Double
+    /// When replies are read aloud.
+    public var speakReplies: SpeakMode
 
     public static let defaultBackendURL = URL(string: "http://127.0.0.1:8765")!
     public static let defaults = UIConfig(
-        backendURL: defaultBackendURL, hotkey: .default, hideAfterSeconds: 20
+        backendURL: defaultBackendURL, hotkey: .default, hideAfterSeconds: 20, speakReplies: .voiceOnly
     )
     public static let minHideSeconds: Double = 3
     public static let maxHideSeconds: Double = 600
@@ -54,6 +57,14 @@ public struct UIConfig: Equatable {
                 }
             } else {
                 warnings.append("hide_after_seconds must be a number, 0 or more. Using the default.")
+            }
+        }
+
+        if let value = object["speak_replies"] {
+            if let text = value.stringValue, let mode = SpeakMode(rawValue: text) {
+                config.speakReplies = mode
+            } else {
+                warnings.append("speak_replies must be \"voice\", \"always\" or \"never\". Using the default.")
             }
         }
         return (config, warnings)

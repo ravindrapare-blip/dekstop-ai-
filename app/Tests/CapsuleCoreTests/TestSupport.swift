@@ -84,3 +84,85 @@ func waitUntil(timeout: TimeInterval = 2, _ condition: () -> Bool) async {
         try? await Task.sleep(nanoseconds: 5_000_000)
     }
 }
+
+final class FakeRecorder: AudioRecording {
+    var permission: MicPermission
+    var grantOnRequest = true
+    var startError: Error?
+    var audio: Data? = Data([1, 2, 3])
+    private(set) var started = 0
+    private(set) var finished = 0
+    private(set) var cancelled = 0
+    private(set) var permissionRequests = 0
+    private var onLevel: ((Float) -> Void)?
+
+    init(permission: MicPermission = .granted) { self.permission = permission }
+
+    func requestPermission(_ completion: @escaping (Bool) -> Void) {
+        permissionRequests += 1
+        if grantOnRequest { permission = .granted }
+        completion(grantOnRequest)
+    }
+
+    func startRecording(onLevel: @escaping (Float) -> Void) throws {
+        if let error = startError { throw error }
+        started += 1
+        self.onLevel = onLevel
+    }
+
+    func finishRecording() -> Data? {
+        finished += 1
+        return audio
+    }
+
+    func cancelRecording() { cancelled += 1 }
+
+    /// Pretend the microphone measured this loudness (dB).
+    func emit(_ level: Float) { onLevel?(level) }
+}
+
+final class FakePlayer: AudioPlaying {
+    var playError: Error?
+    private(set) var played: [Data] = []
+    private(set) var stopped = 0
+    private var completion: ((Error?) -> Void)?
+
+    func play(wav: Data, completion: @escaping (Error?) -> Void) throws {
+        if let error = playError { throw error }
+        self.completion = completion
+        played.append(wav)
+    }
+
+    func stop() {
+        stopped += 1
+        completion = nil
+    }
+
+    func finishPlaying(_ error: Error? = nil) {
+        let done = completion
+        completion = nil
+        done?(error)
+    }
+}
+
+final class FakeSpeech: SpeechOutput {
+    var isAvailable = true
+    private(set) var spoken: [String] = []
+    private(set) var stopped = 0
+    private var onEvent: ((SpeechEvent) -> Void)?
+
+    func speak(_ text: String, onEvent: @escaping (SpeechEvent) -> Void) {
+        spoken.append(text)
+        self.onEvent = onEvent
+    }
+
+    func stop() { stopped += 1 }
+    func emit(_ event: SpeechEvent) { onEvent?(event) }
+}
+
+/// A clock the test moves by hand.
+final class ManualClock {
+    var now = Date(timeIntervalSince1970: 1_000)
+    func advance(_ seconds: TimeInterval) { now = now.addingTimeInterval(seconds) }
+    func read() -> Date { now }
+}

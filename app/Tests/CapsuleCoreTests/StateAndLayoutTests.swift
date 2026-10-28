@@ -17,6 +17,8 @@ final class StateAndLayoutTests: XCTestCase {
 
     func testBusyPhases() {
         XCTAssertTrue(Phase.listening.isBusy)
+        XCTAssertTrue(Phase.transcribing.isBusy)
+        XCTAssertTrue(Phase.speaking.isBusy)
         XCTAssertTrue(Phase.thinking.isBusy)
         XCTAssertTrue(Phase.waiting.isBusy)
         XCTAssertTrue(Phase.executing.isBusy)
@@ -68,15 +70,53 @@ final class StateAndLayoutTests: XCTestCase {
         XCTAssertEqual(s.message, "boom")
     }
 
-    func testListeningTransitions() {
+    func testVoiceInputStates() {
         var s = reduce(CapsuleState(), .listening)
         XCTAssertEqual(s.phase, .listening)
-        s = reduce(s, .listeningEnded)
-        XCTAssertEqual(s.phase, .idle)
-        // listeningEnded must not interrupt other work
-        s = reduce(CapsuleState(), .started)
-        s = reduce(s, .listeningEnded)
+        s = reduce(s, .transcribing)
+        XCTAssertEqual(s.phase, .transcribing)
+        s = reduce(s, .started)                 // the transcript became a request
         XCTAssertEqual(s.phase, .thinking)
+    }
+
+    func testTranscribingOnlyFollowsListening() {
+        XCTAssertEqual(reduce(CapsuleState(), .transcribing).phase, .idle)
+        XCTAssertEqual(reduce(reduce(CapsuleState(), .started), .transcribing).phase, .thinking)
+    }
+
+    func testCancellingVoiceReturnsToIdle() {
+        XCTAssertEqual(reduce(reduce(CapsuleState(), .listening), .voiceCancelled).phase, .idle)
+        let transcribing = reduce(reduce(CapsuleState(), .listening), .transcribing)
+        XCTAssertEqual(reduce(transcribing, .voiceCancelled).phase, .idle)
+        // it must not interrupt other work
+        let thinking = reduce(CapsuleState(), .started)
+        XCTAssertEqual(reduce(thinking, .voiceCancelled).phase, .thinking)
+    }
+
+    func testSpeakingFollowsAFinishedResultAndKeepsItOnScreen() {
+        var s = reduce(CapsuleState(), .finished(message: "Hello there.", tone: .success, lastAction: "reply"))
+        s = reduce(s, .speaking)
+        XCTAssertEqual(s.phase, .speaking)
+        XCTAssertEqual(s.message, "Hello there.")
+        XCTAssertEqual(s.tone, .success)
+        s = reduce(s, .speechEnded)
+        XCTAssertEqual(s.phase, .done)
+        XCTAssertEqual(s.message, "Hello there.")
+    }
+
+    func testSpeakingOnlyAppliesToAFinishedResult() {
+        XCTAssertEqual(reduce(CapsuleState(), .speaking).phase, .idle)
+        XCTAssertEqual(reduce(reduce(CapsuleState(), .started), .speaking).phase, .thinking)
+        XCTAssertEqual(reduce(reduce(CapsuleState(), .started), .speechEnded).phase, .thinking)
+    }
+
+    func testSpeechFailureKeepsTheResultAndSaysWhy() {
+        var s = reduce(CapsuleState(), .finished(message: "Hello.", tone: .neutral, lastAction: "reply"))
+        s = reduce(s, .speaking)
+        s = reduce(s, .speechFailed("couldn't speak: voice output isn't set up"))
+        XCTAssertEqual(s.phase, .done)
+        XCTAssertEqual(s.message, "Hello.")
+        XCTAssertEqual(s.lastAction, "reply · couldn't speak: voice output isn't set up")
     }
 
     func testNoticeReturnsToIdleWithAMessage() {
@@ -95,14 +135,14 @@ final class StateAndLayoutTests: XCTestCase {
     }
 
     func testDismissingKeepsWorkInProgress() {
-        for event in [Event.started, .listening, .waiting(pending), .executing("x")] {
+        for event in [Event.started, .listening, .waiting(pending), .executing("x")] + [Event.transcribing] {
             let before = reduce(CapsuleState(), event)
             XCTAssertEqual(reduce(before, .dismissed), before)
         }
     }
 
     func testEveryPhaseHasAPlaceholder() {
-        let phases: [Phase] = [.idle, .listening, .thinking, .waiting, .executing, .done, .error]
+        let phases: [Phase] = [.idle, .listening, .transcribing, .thinking, .waiting, .executing, .done, .speaking, .error]
         var seen = Set<String>()
         for phase in phases {
             var s = CapsuleState()
@@ -156,7 +196,7 @@ final class StateAndLayoutTests: XCTestCase {
     }
 
     func testHeightNeverBelowThePill() {
-        for phase in [Phase.idle, .listening, .thinking, .executing, .done, .error] {
+        for phase in [Phase.idle, .listening, .transcribing, .thinking, .executing, .done, .speaking, .error] {
             var s = CapsuleState()
             s.phase = phase
             XCTAssertGreaterThanOrEqual(CapsuleLayout(state: s, inputIsEmpty: false).height, 56)

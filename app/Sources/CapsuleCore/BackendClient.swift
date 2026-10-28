@@ -102,12 +102,45 @@ public struct BackendClient {
         )
     }
 
+    /// Sends WAV audio to the backend and returns the words. An empty string means nothing was heard.
+    public func transcribe(wav: Data) async throws -> String {
+        var request = URLRequest(url: baseURL.appendingPathComponent("voice/transcribe"))
+        request.httpMethod = "POST"
+        request.setValue("audio/wav", forHTTPHeaderField: "Content-Type")
+        request.httpBody = wav
+        let reply: TranscribeReply = try decode(try await perform(request))
+        return reply.text
+    }
+
+    /// Asks the backend to turn text into speech and returns WAV audio.
+    public func speak(text: String) async throws -> Data {
+        var request = URLRequest(url: baseURL.appendingPathComponent("voice/speak"))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(SpeakBody(text: text))
+        let audio = try await perform(request)
+        guard !audio.isEmpty else { throw BackendError.badResponse }
+        return audio
+    }
+
+    private struct TranscribeReply: Decodable {
+        let text: String
+    }
+
+    private struct SpeakBody: Encodable {
+        let text: String
+    }
+
     private func post<Body: Encodable, Response: Decodable>(_ path: String, body: Body) async throws -> Response {
         var request = URLRequest(url: baseURL.appendingPathComponent(path))
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(body)
+        return try decode(try await perform(request))
+    }
 
+    /// Sends the request and returns the body of a successful answer. Every failure becomes a BackendError.
+    private func perform(_ request: URLRequest) async throws -> Data {
         let result: (Data, Int)
         do {
             result = try await transport.send(request)
@@ -123,6 +156,10 @@ public struct BackendClient {
         guard (200..<300).contains(status) else {
             throw BackendError.server(status: status, detail: Self.detail(from: data))
         }
+        return data
+    }
+
+    private func decode<Response: Decodable>(_ data: Data) throws -> Response {
         do {
             return try JSONDecoder().decode(Response.self, from: data)
         } catch {

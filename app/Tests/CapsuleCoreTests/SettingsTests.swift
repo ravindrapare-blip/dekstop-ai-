@@ -65,6 +65,7 @@ final class SettingsTests: XCTestCase {
         XCTAssertEqual(d.backendURL.absoluteString, "http://127.0.0.1:8765")
         XCTAssertEqual(d.hotkey, HotkeySpec.default)
         XCTAssertEqual(d.hideAfterSeconds, 20)
+        XCTAssertEqual(d.speakReplies, .voiceOnly)
     }
 
     func testEmptyObjectKeepsDefaultsWithoutWarnings() {
@@ -103,6 +104,8 @@ final class SettingsTests: XCTestCase {
             #"{"hide_after_seconds":true}"#,
             #"{"hide_after_seconds":-1}"#,
             #"{"backend_url":42}"#,
+            #"{"speak_replies":"loud"}"#,
+            #"{"speak_replies":true}"#,
         ]
         for json in bad {
             let r = parse(json)
@@ -123,6 +126,13 @@ final class SettingsTests: XCTestCase {
             XCTAssertEqual(r.config, UIConfig.defaults, text)
             XCTAssertEqual(r.warnings.count, 1, text)
         }
+    }
+
+    func testSpeakRepliesModes() {
+        XCTAssertEqual(parse(#"{"speak_replies":"always"}"#).config.speakReplies, .always)
+        XCTAssertEqual(parse(#"{"speak_replies":"never"}"#).config.speakReplies, .never)
+        XCTAssertEqual(parse(#"{"speak_replies":"voice"}"#).config.speakReplies, .voiceOnly)
+        XCTAssertTrue(parse(#"{"speak_replies":"never"}"#).warnings.isEmpty)
     }
 
     func testUnknownKeysAreIgnored() {

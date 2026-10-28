@@ -1,5 +1,6 @@
 {
   "backend_url": "http://127.0.0.1:8765",
   "hotkey": "cmd+shift+space",
-  "hide_after_seconds": 20
+  "hide_after_seconds": 20,
+  "speak_replies": "voice"
 }

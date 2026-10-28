@@ -55,19 +55,15 @@ ollama pull qwen2.5:3b
 
 `health_check.py` tells you exactly what is missing and how to fix it. `validate_model.py` reports accuracy and tokens per second on your Mac. To try another model, change `ollama.model` in `config.yaml` or pass `--model`.
 
-## 5. Optional preparation for later phases
+## 5. Voice (phase 4)
 
-Not needed yet.
-
-Build whisper.cpp and fetch a small English model:
+Build whisper.cpp, download a model and install Piper as described in `docs/voice.md`, then check:
 
 ```bash
-cd reference/whisper.cpp
-cmake -B build && cmake --build build -j2 --config Release
-sh ./models/download-ggml-model.sh tiny.en
+.venv/bin/python scripts/voice_check.py
 ```
 
-Use `-j2` so the build does not starve the machine.
+It reports what is missing and does a real round trip (speaks a sentence and transcribes it back), printing how long each took. Voice is optional: without it the capsule falls back to typing.
 
 ## 6. Troubleshooting
 

@@ -20,15 +20,20 @@ router:
   max_retries: 1         # one corrective retry when the model returns invalid JSON
 
 voice:
-  enabled: false
-  # Paths are relative to the project root.
+  enabled: true
+  max_text_chars: 500    # longest reply that is spoken; longer ones are shortened
+  system_voice_fallback: true   # macOS "say" voice when Piper is not installed
+  # Paths are relative to the project root. See docs/voice.md for setup.
   whisper:
     binary: reference/whisper.cpp/build/bin/whisper-cli
     model: reference/whisper.cpp/models/ggml-tiny.en.bin
+    language: en         # use "en" with the .en models
     threads: 2
+    timeout_seconds: 60
   piper:
-    binary: piper
-    voice: data/models/en_US-lessac-low.onnx
+    binary: piper        # a name is searched on PATH; a path is relative to the project
+    voice: data/models/en_US-lessac-low.onnx   # needs its .onnx.json file next to it
+    timeout_seconds: 30
 
 browser:
   enabled: false
