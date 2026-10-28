@@ -1,0 +1,11 @@
+---
+source: tui/src/chatwidget/tests/popups_and_settings.rs
+assertion_line: 3309
+expression: popup
+---
+  Select Provider
+  Loading available providers...
+
+›    Loading providers...
+
+  enter select · esc back

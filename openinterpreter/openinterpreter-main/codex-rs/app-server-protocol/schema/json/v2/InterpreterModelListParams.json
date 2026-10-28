@@ -1,0 +1,19 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+    "includeHidden": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "modelProvider": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "title": "InterpreterModelListParams",
+  "type": "object"
+}

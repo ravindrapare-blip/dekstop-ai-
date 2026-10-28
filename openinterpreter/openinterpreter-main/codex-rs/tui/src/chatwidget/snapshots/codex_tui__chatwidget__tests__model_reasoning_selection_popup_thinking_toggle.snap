@@ -1,0 +1,11 @@
+---
+source: tui/src/chatwidget/tests/popups_and_settings.rs
+assertion_line: 2841
+expression: popup
+---
+  Select Reasoning Level for kimi-k2.5
+
+› 1. Thinking (default)  Use the model's default thinking behavior.
+  2. None                Disable thinking explicitly for this model.
+
+  Press enter to confirm or esc to go back

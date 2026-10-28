@@ -1,0 +1,79 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "InterpreterProvider": {
+      "properties": {
+        "baseUrl": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "configured": {
+          "type": "boolean"
+        },
+        "description": {
+          "type": "string"
+        },
+        "envKey": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "isCurrent": {
+          "type": "boolean"
+        },
+        "isDefault": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        },
+        "wireApi": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/WireApiDto"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "configured",
+        "description",
+        "id",
+        "isCurrent",
+        "isDefault",
+        "name"
+      ],
+      "type": "object"
+    },
+    "WireApiDto": {
+      "enum": [
+        "responses",
+        "chat",
+        "messages"
+      ],
+      "type": "string"
+    }
+  },
+  "properties": {
+    "data": {
+      "items": {
+        "$ref": "#/definitions/InterpreterProvider"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "data"
+  ],
+  "title": "InterpreterProviderListResponse",
+  "type": "object"
+}

@@ -1,0 +1,230 @@
+/**
+ * @license
+ * Copyright 2022 Google Inc.
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import {debuglog as nodeUtilDebuglog, format} from 'node:util';
+
+import Mocha from 'mocha';
+// @ts-expect-error No types for mocha's internal API
+import {createCommon as commonInterface} from 'mocha/lib/interfaces/common.js';
+import type {Logger} from 'puppeteer-core/internal/common/Debug.js';
+import {environment} from 'puppeteer-core/internal/environment.js';
+
+import {testIdMatchesExpectationPattern} from './utils.js';
+
+let capturedLogs: string[] = [];
+let captureLogs = Boolean(process.env['RUNNER_DEBUG']);
+
+export function setLogCapture(value: boolean): void {
+  captureLogs = Boolean(process.env['RUNNER_DEBUG']) || value;
+}
+
+export function getCapturedLogs(): string[] {
+  return capturedLogs;
+}
+
+export function clearCapturedLogs(): void {
+  capturedLogs = [];
+}
+
+export const logger: Logger = (prefix: string) => {
+  return (...args: unknown[]) => {
+    if (captureLogs) {
+      capturedLogs.push(`${prefix} ${format(...args)}`);
+    }
+  };
+};
+
+environment.value.debuglog = (prefix: string) => {
+  const nodeDebug = nodeUtilDebuglog(prefix);
+  const testLog = logger(prefix);
+  return Object.assign(
+    (...args: unknown[]) => {
+      testLog?.(...args);
+      if (nodeDebug.enabled) {
+        (nodeDebug as (...args: unknown[]) => void)(...args);
+      }
+    },
+    {enabled: true},
+  );
+};
+
+export function dumpLogs(runnable: Mocha.Runnable): void {
+  const logs = getCapturedLogs();
+  if (logs.length > 0) {
+    console.log(`\n"${runnable.fullTitle()}" failed. Here is a debug log:`);
+    console.log(logs.join('\n') + '\n');
+  }
+  clearCapturedLogs();
+}
+
+type SuiteFunction = ((this: Mocha.Suite) => void) | undefined;
+type ExclusiveSuiteFunction = (this: Mocha.Suite) => void;
+
+const skippedTests: Array<{testIdPattern: string; skip: true}> = process.env[
+  'PUPPETEER_SKIPPED_TEST_CONFIG'
+]
+  ? JSON.parse(process.env['PUPPETEER_SKIPPED_TEST_CONFIG'])
+  : [];
+
+const deflakeRetries = Number(
+  process.env['PUPPETEER_DEFLAKE_RETRIES']
+    ? process.env['PUPPETEER_DEFLAKE_RETRIES']
+    : 100,
+);
+const deflakeTestPattern: string | undefined =
+  process.env['PUPPETEER_DEFLAKE_TESTS'];
+
+function shouldSkipTest(test: Mocha.Test): boolean {
+  // TODO: more efficient lookup.
+  const definition = skippedTests.find(skippedTest => {
+    return testIdMatchesExpectationPattern(test, skippedTest.testIdPattern);
+  });
+  if (definition && definition.skip) {
+    return true;
+  }
+  return false;
+}
+
+function shouldDeflakeTest(test: Mocha.Test): boolean {
+  if (deflakeTestPattern) {
+    // TODO: cache if we have seen it already
+    return testIdMatchesExpectationPattern(test, deflakeTestPattern);
+  }
+  return false;
+}
+
+function customBDDInterface(suite: Mocha.Suite): void {
+  const suites: [Mocha.Suite] = [suite];
+
+  suite.on(
+    Mocha.Suite.constants.EVENT_FILE_PRE_REQUIRE,
+    function (context, file, mocha) {
+      const common = commonInterface(suites, context, mocha);
+
+      context['before'] = common.before;
+      context['after'] = common.after;
+      context['beforeEach'] = common.beforeEach;
+      context['afterEach'] = common.afterEach;
+      if (mocha.options.delay) {
+        context['run'] = common.runWithSuite(suite);
+      }
+      function describe(title: string, fn: SuiteFunction) {
+        return common.suite.create({
+          title: title,
+          file: file,
+          fn: fn,
+        });
+      }
+      describe.only = function (title: string, fn: ExclusiveSuiteFunction) {
+        return common.suite.only({
+          title: title,
+          file: file,
+          fn: fn,
+          isOnly: true,
+        });
+      };
+
+      describe.skip = function (title: string, fn: SuiteFunction) {
+        return common.suite.skip({
+          title: title,
+          file: file,
+          fn: fn,
+        });
+      };
+
+      describe.withDebugLogs = function (
+        description: string,
+        body: (this: Mocha.Suite) => void,
+      ): void {
+        context['describe']('with Debug Logs', () => {
+          context['beforeEach'](() => {
+            setLogCapture(true);
+          });
+          context['afterEach'](() => {
+            setLogCapture(false);
+          });
+          context['describe'](description, body);
+        });
+      };
+
+      // @ts-expect-error override the method to support custom functionality
+      context['describe'] = describe;
+
+      function it(title: string, fn: Mocha.TestFunction, itOnly = false) {
+        const suite = suites[0]! as Mocha.Suite;
+        const test = new Mocha.Test(title, suite.isPending() ? undefined : fn);
+        test.file = file;
+        test.parent = suite;
+
+        const describeOnly = Boolean(
+          // @ts-expect-error pokes at internal methods
+          suite.parent?._onlySuites.find(child => {
+            return child === suite;
+          }),
+        );
+        if (shouldDeflakeTest(test)) {
+          const deflakeSuit = Mocha.Suite.create(suite, 'with Debug Logs');
+          test.file = file;
+          deflakeSuit.beforeEach(function () {
+            setLogCapture(true);
+          });
+          deflakeSuit.afterEach(function () {
+            setLogCapture(false);
+          });
+          for (let i = 0; i < deflakeRetries; i++) {
+            deflakeSuit.addTest(test.clone());
+          }
+          return test;
+        } else if (!(itOnly || describeOnly) && shouldSkipTest(test)) {
+          const test = new Mocha.Test(title);
+          test.file = file;
+          suite.addTest(test);
+          return test;
+        } else {
+          suite.addTest(test);
+          return test;
+        }
+      }
+
+      it.only = function (title: string, fn: Mocha.TestFunction) {
+        return common.test.only(
+          mocha,
+          (context['it'] as unknown as typeof it)(title, fn, true),
+        );
+      };
+
+      it.skip = function (title: string) {
+        return context['it'](title);
+      };
+
+      function wrapDeflake(
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
+        func: Function,
+      ): (repeats: number, title: string, fn: Mocha.AsyncFunc) => void {
+        return (repeats: number, title: string, fn: Mocha.AsyncFunc): void => {
+          (context['describe'] as unknown as typeof describe).withDebugLogs(
+            'with Debug Logs',
+            () => {
+              for (let i = 1; i <= repeats; i++) {
+                func(`${i}/${title}`, fn);
+              }
+            },
+          );
+        };
+      }
+
+      it.deflake = wrapDeflake(it);
+      it.deflakeOnly = wrapDeflake(it.only);
+
+      // @ts-expect-error override the method to support custom functionality
+      context.it = it;
+    },
+  );
+}
+
+customBDDInterface.description = 'Custom BDD';
+
+export default customBDDInterface;

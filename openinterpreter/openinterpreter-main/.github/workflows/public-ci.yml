@@ -1,0 +1,234 @@
+name: public-ci
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  repository-smoke:
+    name: Repository smoke
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Validate workflow YAML
+        run: |
+          set -euo pipefail
+          ruby -e 'require "yaml"; Dir[".github/workflows/*.yml"].sort.each { |path| YAML.load_file(path); puts path }'
+
+      - name: Validate localized documentation parity
+        run: node scripts/check-doc-locales.mjs
+
+      - name: Test streaming web chat guide sample
+        run: node scripts/test-streaming-web-chat.mjs
+
+      - name: Validate installer scripts
+        run: |
+          set -euo pipefail
+          bash -n scripts/install/install.sh
+          bash -n scripts/install/install-open-interpreter.sh
+          shellcheck -s sh scripts/install/install.sh
+          shellcheck -s sh scripts/install/install-open-interpreter.sh
+          grep -q 'open-interpreter-package' scripts/install/install.sh
+          grep -q 'open-interpreter-package' scripts/install/install.ps1
+          grep -q 'openinterpreter/openinterpreter' scripts/install/install.sh
+          grep -q 'openinterpreter/openinterpreter' scripts/install/install.ps1
+
+      - name: Test packaging and installer scripts
+        env:
+          CODEX_REPO_ROOT: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s scripts/codex_package -p 'test_*.py'
+          python3 -m unittest discover -s scripts/install -p 'test_*.py'
+
+      - name: Validate release workflow shape
+        run: |
+          set -euo pipefail
+          ruby <<'RUBY'
+          require "yaml"
+
+          release = YAML.load_file(".github/workflows/rust-release.yml")
+          tags = release.fetch(true).fetch("push").fetch("tags")
+          raise "release workflow missing tag trigger" unless tags.any? { |tag| tag.include?("v*.*.*") }
+
+          build_steps = release.fetch("jobs").fetch("build").fetch("steps")
+          rusty_v8 = build_steps.find { |step| step["uses"] == "./.github/actions/setup-rusty-v8" }
+          raise "release workflow missing checksum-verified rusty_v8 setup" unless rusty_v8
+          raise "rusty_v8 setup must run on every release target" if rusty_v8.key?("if")
+
+          text = File.read(".github/workflows/rust-release.yml")
+          raise "release workflow must build the open-interpreter bundle" unless text.include?("open-interpreter")
+          raise "release workflow must validate the Open Interpreter asset set" unless text.include?("Validate Open Interpreter release assets")
+
+          jobs = release.fetch("jobs")
+          %w[resolve_macos_signing_mode resolve_windows_signing_mode].each do |job_name|
+            job = jobs.fetch(job_name)
+            output = job.fetch("outputs").fetch("signing_mode")
+            raise "#{job_name} must expose the derived signing mode" unless output.include?("steps.resolve.outputs.signing_mode")
+          end
+
+          build_needs = Array(jobs.fetch("build").fetch("needs"))
+          %w[resolve_macos_signing_mode resolve_windows_signing_mode].each do |job_name|
+            raise "release build must resolve #{job_name} first" unless build_needs.include?(job_name)
+          end
+
+          signed_macos = jobs.fetch("sign-macos-binaries")
+          raise "macOS signing job must be conditional" unless signed_macos.fetch("if").include?("signing_mode == 'signed'")
+          unsigned_macos = jobs.fetch("prepare-unsigned-macos")
+          raise "unsigned macOS job must be conditional" unless unsigned_macos.fetch("if").include?("signing_mode == 'unsigned'")
+
+          package_macos = jobs.fetch("package-macos")
+          package_needs = Array(package_macos.fetch("needs"))
+          %w[sign-macos-binaries prepare-unsigned-macos].each do |job_name|
+            raise "macOS packaging must depend on #{job_name}" unless package_needs.include?(job_name)
+          end
+          raise "macOS packaging must select mode-specific artifacts" unless text.include?("${{ needs.resolve_macos_signing_mode.outputs.signing_mode }}-binaries")
+          raise "macOS verification must support unsigned mode" unless text.include?("MACOS_SIGNING_MODE")
+
+          signed_dmg = jobs.fetch("sign-macos-dmg")
+          raise "macOS DMG signing job must be conditional" unless signed_dmg.fetch("if").include?("signing_mode == 'signed'")
+          finalize_macos = jobs.fetch("finalize-macos")
+          raise "macOS finalization must depend on the derived mode" unless Array(finalize_macos.fetch("needs")).include?("resolve_macos_signing_mode")
+
+          windows = YAML.load_file(".github/workflows/rust-release-windows.yml")
+          workflow_call = windows.fetch(true).fetch("workflow_call")
+          signing_input = workflow_call.fetch("inputs").fetch("signing_mode")
+          raise "Windows release workflow must require signing_mode" unless signing_input.fetch("required") == true
+          windows_job = windows.fetch("jobs").fetch("build-windows")
+          windows_sign = windows_job.fetch("steps").find { |step| step["uses"] == "./.github/actions/windows-code-sign" }
+          raise "Windows signing step must be conditional" unless windows_sign.fetch("if").include?("inputs.signing_mode == 'signed'")
+          caller_windows = jobs.fetch("build-windows")
+          raise "caller must pass the derived Windows signing mode" unless caller_windows.fetch("with").fetch("signing_mode").include?("resolve_windows_signing_mode.outputs.signing_mode")
+
+          cargo_ci = YAML.load_file(".github/workflows/cargo-ci.yml")
+          cargo_steps = cargo_ci.fetch("jobs").fetch("fmt-build-test").fetch("steps")
+          cleanup = cargo_steps.find { |step| step["name"] == "Invalidate cached rusty_v8 build output" }
+          raise "cargo CI missing rusty_v8 cleanup" unless cleanup
+          cleanup_run = cleanup.fetch("run")
+          guard_start = cleanup_run.index("if [ -d target ]; then")
+          find_target = guard_start && cleanup_run.index("find target", guard_start)
+          guard_end = find_target && cleanup_run.index("\nfi", find_target)
+          raise "cargo CI rusty_v8 cleanup must guard an absent target directory" unless guard_start && find_target && guard_end
+
+          public_ci = File.read(".github/workflows/public-ci.yml")
+          %w[codex codex-code-mode-host codex-command-runner codex-windows-sandbox-setup].each do |binary|
+            raise "Windows CI must build release binary #{binary}" unless public_ci.include?("--bin #{binary}")
+          end
+          RUBY
+
+      - name: Test release signing mode resolver
+        run: |
+          set -euo pipefail
+          bash -n .github/scripts/resolve-release-signing-mode.sh
+          python3 .github/scripts/test_release_signing_mode.py
+
+      - name: Confirm inherited heavyweight workflows are manual-only
+        run: |
+          set -euo pipefail
+          ruby <<'RUBY'
+          require "yaml"
+
+          manual_only = %w[
+            bazel.yml
+            blob-size-policy.yml
+            cargo-deny.yml
+            ci.yml
+            codespell.yml
+            python-sdk-release.yml
+            rust-ci.yml
+            rust-ci-full.yml
+            rusty-v8-release.yml
+            sdk.yml
+            v8-canary.yml
+          ]
+
+          manual_only.each do |file|
+            path = File.join(".github/workflows", file)
+            next unless File.exist?(path)
+            workflow = YAML.load_file(path)
+            triggers = workflow.fetch(true)
+            unexpected = triggers.keys - ["workflow_dispatch"]
+            raise "#{file} should stay manual-only, found #{unexpected.inspect}" unless unexpected.empty?
+          end
+          RUBY
+
+  windows-installer:
+    name: Windows installer architecture
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-2025
+            target: x86_64-pc-windows-msvc
+          - runner: windows-11-arm
+            target: aarch64-pc-windows-msvc
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Test with Windows PowerShell
+        shell: powershell
+        run: scripts/install/test_install_ps1.ps1
+
+      - name: Test with PowerShell
+        shell: pwsh
+        run: scripts/install/test_install_ps1.ps1
+
+      # This intentionally mirrors the release binary set, not merely one
+      # Windows-only crate. Windows-only Rust modules and target-specific native
+      # dependencies are excluded on Linux and macOS, so failures otherwise
+      # surface only after a release tag starts the packaging matrix.
+      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          workspaces: codex-rs
+
+      - name: Configure checksum-verified rusty_v8 artifact
+        uses: ./.github/actions/setup-rusty-v8
+        with:
+          target: ${{ matrix.target }}
+
+      # rust-cache can restore v8's Cargo fingerprint without preserving the
+      # large native archive in its build-script output directory. Force only
+      # that package to rerun its build script so it unpacks the verified
+      # RUSTY_V8_ARCHIVE downloaded above into this runner's target directory.
+      - name: Invalidate cached rusty_v8 build output
+        shell: pwsh
+        working-directory: codex-rs
+        run: |
+          $ErrorActionPreference = "Stop"
+          if (Test-Path target) {
+            Get-ChildItem -Path target -Directory -Recurse -Force |
+              Where-Object {
+                $_.Name -like "v8-*" -and
+                ($_.Parent.Name -eq "build" -or $_.Parent.Name -eq ".fingerprint")
+              } |
+              Sort-Object { $_.FullName.Length } -Descending |
+              ForEach-Object { Remove-Item -LiteralPath $_.FullName -Recurse -Force }
+          }
+
+      - name: Build the native Windows release binaries
+        shell: pwsh
+        working-directory: codex-rs
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          if ($env:TARGET -eq "x86_64-pc-windows-msvc") {
+            $env:LIBSQLITE3_FLAGS = "SQLITE_DISABLE_INTRINSIC"
+          }
+          cargo build --locked --target $env:TARGET --release `
+            --bin codex `
+            --bin codex-code-mode-host `
+            --bin codex-command-runner `
+            --bin codex-windows-sandbox-setup

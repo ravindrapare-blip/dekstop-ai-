@@ -1,0 +1,19 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+    "profile": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "providerId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "providerId"
+  ],
+  "title": "InterpreterProviderSetParams",
+  "type": "object"
+}

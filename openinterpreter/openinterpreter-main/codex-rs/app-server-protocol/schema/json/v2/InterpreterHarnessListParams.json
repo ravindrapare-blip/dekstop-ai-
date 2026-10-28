@@ -1,0 +1,19 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+    "model": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "providerId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "providerId"
+  ],
+  "title": "InterpreterHarnessListParams",
+  "type": "object"
+}

@@ -1,0 +1,260 @@
+/**
+ * @license
+ * Copyright 2024 Google Inc.
+ * SPDX-License-Identifier: Apache-2.0
+ */
+import {
+  createServer,
+  type AddressInfo,
+  type Server,
+  type Socket,
+} from 'node:net';
+import {describe, it, beforeEach, afterEach} from 'node:test';
+
+import expect from 'expect';
+import type {WebSocket} from 'ws';
+import {WebSocketServer} from 'ws';
+
+import {NodeWebSocketTransport} from './NodeWebSocketTransport.js';
+
+describe('NodeWebSocketTransport', () => {
+  let wss: WebSocketServer;
+  let transport: NodeWebSocketTransport;
+  let connection: WebSocket;
+
+  beforeEach(async () => {
+    wss = new WebSocketServer({port: 8080});
+    wss.on('connection', c => {
+      connection = c;
+    });
+    transport = await NodeWebSocketTransport.create(
+      'ws://127.0.0.1:8080',
+      undefined,
+      () => {
+        return undefined;
+      },
+    );
+  });
+
+  afterEach(() => {
+    transport.close();
+    wss.close();
+  });
+
+  it('should dispatch messages in order handling microtasks for each message first', async () => {
+    const log: string[] = [];
+    const result = new Promise<void>(resolve => {
+      transport.onmessage = message => {
+        log.push('message received ' + message);
+        return Promise.resolve().then(() => {
+          log.push('microtask1 ' + message);
+          return Promise.resolve().then(() => {
+            log.push('microtask2 ' + message);
+            if (log.length === 6) {
+              resolve();
+            }
+          });
+        });
+      };
+    });
+    connection.send('m1');
+    connection.send('m2');
+    await result;
+    expect(log).toEqual([
+      'message received m1',
+      'microtask1 m1',
+      'microtask2 m1',
+      'message received m2',
+      'microtask1 m2',
+      'microtask2 m2',
+    ]);
+  });
+
+  describe('keepAlive', () => {
+    let keepAliveWss: WebSocketServer;
+    let keepAliveTransport: NodeWebSocketTransport | undefined;
+
+    afterEach(() => {
+      keepAliveTransport?.close();
+      keepAliveTransport = undefined;
+      keepAliveWss?.close();
+    });
+
+    it('closes the transport when the peer stops answering pings', async () => {
+      // autoPong: false makes the server behave like a peer that is gone but
+      // never sent a TCP FIN, which is the case `close` alone cannot detect.
+      keepAliveWss = new WebSocketServer({port: 8081, autoPong: false});
+      keepAliveTransport = await NodeWebSocketTransport.create(
+        'ws://127.0.0.1:8081',
+        undefined,
+        () => {
+          return undefined;
+        },
+        {keepAlive: true, keepAliveIntervalMs: 50},
+      );
+
+      const closed = new Promise<void>(resolve => {
+        keepAliveTransport!.onclose = resolve;
+      });
+      // Resolves only if the missing pong is detected; the test times out
+      // otherwise, which is exactly the reported bug.
+      await closed;
+    });
+
+    it('stays open while the peer answers pings', async () => {
+      keepAliveWss = new WebSocketServer({port: 8082});
+      keepAliveTransport = await NodeWebSocketTransport.create(
+        'ws://127.0.0.1:8082',
+        undefined,
+        () => {
+          return undefined;
+        },
+        {keepAlive: true, keepAliveIntervalMs: 50},
+      );
+
+      let closed = false;
+      keepAliveTransport.onclose = () => {
+        closed = true;
+      };
+      await new Promise(resolve => {
+        return setTimeout(resolve, 300);
+      });
+      expect(closed).toBe(false);
+    });
+
+    it('does not ping when keepAlive is not enabled', async () => {
+      keepAliveWss = new WebSocketServer({port: 8083, autoPong: false});
+      let pings = 0;
+      keepAliveWss.on('connection', c => {
+        c.on('ping', () => {
+          pings++;
+        });
+      });
+      keepAliveTransport = await NodeWebSocketTransport.create(
+        'ws://127.0.0.1:8083',
+        undefined,
+        () => {
+          return undefined;
+        },
+      );
+
+      let closed = false;
+      keepAliveTransport.onclose = () => {
+        closed = true;
+      };
+      await new Promise(resolve => {
+        return setTimeout(resolve, 300);
+      });
+      expect(pings).toBe(0);
+      expect(closed).toBe(false);
+    });
+  });
+
+  describe('maxPayload', () => {
+    let maxPayloadWss: WebSocketServer;
+    let maxPayloadTransport: NodeWebSocketTransport | undefined;
+
+    afterEach(() => {
+      maxPayloadTransport?.close();
+      maxPayloadTransport = undefined;
+      maxPayloadWss?.close();
+    });
+
+    it('accepts messages up to maxPayload', async () => {
+      maxPayloadWss = new WebSocketServer({port: 0});
+      maxPayloadWss.on('connection', c => {
+        c.send('a'.repeat(1024));
+      });
+      maxPayloadTransport = await NodeWebSocketTransport.create(
+        `ws://127.0.0.1:${(maxPayloadWss.address() as AddressInfo).port}`,
+        undefined,
+        () => {
+          return undefined;
+        },
+        {maxPayload: 1024},
+      );
+
+      const message = await new Promise(resolve => {
+        maxPayloadTransport!.onmessage = resolve;
+      });
+      expect(message).toHaveLength(1024);
+    });
+
+    it('closes the transport on messages larger than maxPayload', async () => {
+      maxPayloadWss = new WebSocketServer({port: 0});
+      maxPayloadWss.on('connection', c => {
+        c.send('a'.repeat(1025));
+      });
+      maxPayloadTransport = await NodeWebSocketTransport.create(
+        `ws://127.0.0.1:${(maxPayloadWss.address() as AddressInfo).port}`,
+        undefined,
+        () => {
+          return undefined;
+        },
+        {maxPayload: 1024},
+      );
+
+      let received = false;
+      maxPayloadTransport.onmessage = () => {
+        received = true;
+      };
+      await new Promise<void>(resolve => {
+        maxPayloadTransport!.onclose = resolve;
+      });
+      expect(received).toBe(false);
+    });
+  });
+  describe('handshakeTimeout', () => {
+    let silentServer: Server | undefined;
+    const sockets: Socket[] = [];
+
+    afterEach(() => {
+      for (const socket of sockets) {
+        socket.destroy();
+      }
+      sockets.length = 0;
+      silentServer?.close();
+      silentServer = undefined;
+    });
+
+    it('rejects when the server never answers the upgrade request', async () => {
+      // Accepts the TCP connection but never responds to the HTTP upgrade.
+      silentServer = createServer(socket => {
+        sockets.push(socket);
+      });
+      await new Promise<void>(resolve => {
+        silentServer!.listen(0, '127.0.0.1', resolve);
+      });
+      const port = (silentServer.address() as AddressInfo).port;
+
+      const start = Date.now();
+      await expect(
+        NodeWebSocketTransport.create(
+          `ws://127.0.0.1:${port}`,
+          undefined,
+          () => {
+            return undefined;
+          },
+          {handshakeTimeout: 100},
+        ),
+        // `create` rejects with the WebSocket error event, as for any other
+        // connection error.
+      ).rejects.toMatchObject({
+        message: expect.stringMatching(/handshake has timed out/),
+      });
+      expect(Date.now() - start).toBeLessThan(5000);
+    });
+
+    it('connects normally when the handshake finishes in time', async () => {
+      const handshakeTransport = await NodeWebSocketTransport.create(
+        'ws://127.0.0.1:8080',
+        undefined,
+        () => {
+          return undefined;
+        },
+        {handshakeTimeout: 5000},
+      );
+      handshakeTransport.close();
+    });
+  });
+});
