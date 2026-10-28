@@ -36,11 +36,13 @@ voice:
     timeout_seconds: 30
 
 browser:
-  enabled: false
+  enabled: true          # the browser helper (Node) is only started when you first ask for a browser action
   host: 127.0.0.1
   port: 8766
+  node: node             # a name is searched on PATH; Node 18 or newer (run "cd browser && npm install" once)
   chrome_path: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
-  profile_dir: data/chrome-profile   # dedicated profile, not the user's own
+  profile_dir: data/chrome-profile   # dedicated profile, not your own; sign in to sites here once and it stays
+  idle_minutes: 30       # the helper and its Chrome window close after this long without a browser action
 
 automation:
   enabled: true

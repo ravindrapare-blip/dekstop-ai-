@@ -143,7 +143,7 @@ def test_choices_are_single_use_and_cannot_be_forged(tmp_path):
 def test_choices_expire_and_can_be_cancelled(tmp_path):
     clock = [0.0]
     w = make_world(tmp_path, apps={**APPS, "Google Chrome Canary": "com.google.Chrome.canary"})
-    w.service._clock = lambda: clock[0]
+    w.service.choices._clock = lambda: clock[0]
     cid = w.service.prepare("open_app", {"app_name": "chrome"}).result.choice["choice_id"]
     clock[0] = 500
     assert "expired" in w.service.choose(cid, "1").message
@@ -154,7 +154,7 @@ def test_choices_expire_and_can_be_cancelled(tmp_path):
 def test_the_list_of_pending_choices_is_bounded(tmp_path):
     w = make_world(tmp_path, apps={**APPS, "Google Chrome Canary": "com.google.Chrome.canary"})
     ids = [w.service.prepare("open_app", {"app_name": "chrome"}).result.choice["choice_id"] for _ in range(7)]
-    assert len(w.service._choices) == 5
+    assert len(w.service.choices) == 5
     assert "expired" in w.service.choose(ids[0], "1").message
 
 

@@ -1,6 +1,7 @@
 """Argument checks. They can raise a tool's risk but never lower it. Pure functions, no I/O."""
 import os
 import re
+import unicodedata
 from dataclasses import dataclass
 from urllib.parse import urlparse
 
@@ -8,7 +9,9 @@ from safety.policy import Policy
 from safety.risk import Risk
 
 # Args that name an app, path, address or query must be single-line, with no control characters.
-SINGLE_LINE_ARGS = {"app_name", "path_or_name", "url", "query", "tab"}
+SINGLE_LINE_ARGS = {"app_name", "path_or_name", "url", "query", "tab", "label", "target", "direction", "page_hint", "field_kind"}
+SCROLL_DIRECTIONS = ("up", "down", "top", "bottom")
+PAGE_HINTS = ("", "login", "payment")
 _CONTROL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")          # everything but tab and newline
 _CONTROL_OR_NEWLINE = re.compile(r"[\x00-\x1f\x7f]")
 _SHELL_META = re.compile(r"[;|&$`<>\\]")
@@ -82,6 +85,66 @@ def check_app(tool: str, value: str, policy: Policy) -> list[Finding]:
     return []
 
 
+def _is_count(value) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value >= 0
+
+
+def _mixed_script(text: str) -> bool:
+    """A word mixing Latin letters with look-alike Cyrillic or Greek ones (to dodge the word lists)."""
+    for word in text.split():
+        scripts = {unicodedata.name(c, "").split(" ")[0] for c in word if c.isalpha()}
+        if "LATIN" in scripts and scripts & {"CYRILLIC", "GREEK"}:
+            return True
+    return False
+
+
+def check_click_target(label: str, policy: Policy) -> list[Finding]:
+    """Judge the visible name of the real button or link that will be clicked."""
+    if _mixed_script(label):
+        return [Finding(Risk.MEDIUM, "the button's name mixes alphabets, which can hide what it does")]
+    words = " " + " ".join("".join(c if c.isalnum() else " " for c in label.lower()).split()) + " "
+    hit = next((w for w in sorted(policy.click_high_words) if f" {w} " in words), None)
+    if hit:
+        return [Finding(Risk.HIGH, f"clicking “{label}” could delete something or spend money")]
+    hit = next((w for w in sorted(policy.click_confirm_words) if f" {w} " in words), None)
+    if hit:
+        return [Finding(Risk.MEDIUM, f"clicking “{label}” sends or changes something")]
+    return []
+
+
+def check_browser(tool: str, args: dict, policy: Policy) -> list[Finding]:
+    """Checks for acting inside a web page. The arguments describe the real thing found on the page,
+    filled in by the browser service; a call that lacks them was never checked against the page, so it is refused."""
+    findings: list[Finding] = []
+    hint = args.get("page_hint", "")
+    if hint not in PAGE_HINTS:
+        findings.append(Finding(Risk.CRITICAL, "the page type is not understood"))
+    elif hint == "payment":
+        findings.append(Finding(Risk.HIGH, "this is a payment page"))
+    elif hint == "login":
+        findings.append(Finding(Risk.MEDIUM, "this is a sign-in page"))
+
+    if tool == "click_text":
+        text, target = args.get("text"), args.get("target")
+        if not isinstance(text, str) or _CONTROL_OR_NEWLINE.search(text):
+            findings.append(Finding(Risk.CRITICAL, "text must be one line of text"))
+        if not isinstance(target, str) or not target.strip():
+            findings.append(Finding(Risk.CRITICAL, "the button was not identified on the page"))
+        else:
+            findings += check_click_target(target, policy)
+    elif tool == "fill_field":
+        kind, target, value = args.get("field_kind"), args.get("target"), args.get("value")
+        if not isinstance(target, str) or not target.strip():
+            findings.append(Finding(Risk.CRITICAL, "the box was not identified on the page"))
+        elif kind != "text":
+            findings.append(Finding(Risk.CRITICAL, "I never type into password, card or one-time-code boxes"))
+        if not isinstance(value, str) or not value:
+            findings.append(Finding(Risk.CRITICAL, "value must be text"))
+    elif tool == "scroll_page" and args.get("direction") not in SCROLL_DIRECTIONS:
+        findings.append(Finding(Risk.CRITICAL, "scroll direction must be up, down, top or bottom"))
+    return findings
+
+
 def check_args(tool: str, args: dict, policy: Policy) -> Finding | None:
     """The most serious problem with these arguments, or None."""
     findings: list[Finding] = []
@@ -95,12 +158,18 @@ def check_args(tool: str, args: dict, policy: Policy) -> Finding | None:
         if pattern.search(value):
             findings.append(Finding(Risk.CRITICAL, f"{name} contains control characters"))
 
+    for name in ("nth", "tab_id"):
+        if name in args and not _is_count(args[name]):
+            findings.append(Finding(Risk.CRITICAL, f"{name} must be a number"))
+
     if tool in ("open_file", "open_folder") and isinstance(args.get("path_or_name"), str):
         findings += check_path(args["path_or_name"], policy, opening_file=tool == "open_file")
-    elif tool == "open_url" and isinstance(args.get("url"), str):
+    elif tool in ("open_url", "new_tab") and isinstance(args.get("url"), str):
         findings += check_url(args["url"], policy)
     elif tool in ("open_app", "focus_app", "close_app") and isinstance(args.get("app_name"), str):
         findings += check_app(tool, args["app_name"], policy)
+    elif tool in ("click_text", "fill_field", "scroll_page"):
+        findings += check_browser(tool, args, policy)
     elif tool == "set_volume":
         level = args.get("level")
         if not isinstance(level, int) or isinstance(level, bool) or not 0 <= level <= 100:

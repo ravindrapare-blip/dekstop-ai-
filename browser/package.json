@@ -1,10 +1,17 @@
 {
   "name": "assistant-browser-worker",
-  "version": "0.0.1",
+  "version": "0.6.0",
   "private": true,
-  "description": "Chrome automation worker. Phase 0: dependency only.",
-  "engines": { "node": ">=18" },
+  "description": "Chrome automation worker for the local assistant",
+  "engines": {
+    "node": ">=18"
+  },
   "dependencies": {
     "puppeteer-core": "23.11.1"
+  },
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test test/"
   }
 }

@@ -2,13 +2,14 @@
 from pathlib import Path
 
 from automation.apps import AppCatalog
+from automation.choices import ChoiceStore
 from automation.controller import AppController
 from automation.files import PRIMARY_DIRS, SECONDARY_DIRS, FileFinder
 from automation.hammerspoon import HammerspoonClient
 from automation.service import ActionService
 
 
-def build_actions(cfg: dict, root: Path) -> ActionService:
+def build_actions(cfg: dict, root: Path, choices: ChoiceStore | None = None) -> ActionService:
     a = cfg.get("automation", {})
     f = cfg.get("files", {})
     hammerspoon = None
@@ -24,4 +25,4 @@ def build_actions(cfg: dict, root: Path) -> ActionService:
         max_entries=f.get("max_entries", 20_000),
         time_budget=f.get("time_budget_seconds", 2.0),
     )
-    return ActionService(AppCatalog(), finder, AppController(hammerspoon))
+    return ActionService(AppCatalog(), finder, AppController(hammerspoon), choices=choices)

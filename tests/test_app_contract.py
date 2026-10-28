@@ -12,6 +12,10 @@ from fastapi.testclient import TestClient
 from backend.config import ROOT
 from backend.llm import OllamaClient
 from backend.main import create_app
+from automation.choices import ChoiceStore
+from backend.actions import ActionRouter
+from browserctl import BrowserService
+from fake_browser import FakeWorker, cand
 from fakes import APPS, make_world
 from safety import GuardrailManager, Policy
 from test_voice import FakeEngine, make_wav
@@ -34,7 +38,13 @@ class Scene:
         self.world = make_world(tmp_path, apps=apps)
         self.home = self.world.home
 
-    def client(self, model_output, ollama_down=False, voice=None):
+    def browser(self, worker):
+        """The desktop service plus a browser service backed by a pretend worker, sharing one choice store."""
+        choices = ChoiceStore()
+        self.world.service.choices = choices
+        return ActionRouter(self.world.service, BrowserService(worker, choices=choices), choices)
+
+    def client(self, model_output, ollama_down=False, voice=None, actions=None):
         def handler(request: httpx.Request) -> httpx.Response:
             if ollama_down:
                 raise httpx.ConnectError("refused", request=request)
@@ -44,7 +54,7 @@ class Scene:
 
         llm = OllamaClient("http://127.0.0.1:11434", "m", transport=httpx.MockTransport(handler))
         cfg = {"ollama": {}, "router": {"max_retries": 0}}
-        return TestClient(create_app(cfg, llm, guard=GuardrailManager(POLICY), voice=voice, actions=self.world.service))
+        return TestClient(create_app(cfg, llm, guard=GuardrailManager(POLICY), voice=voice, actions=actions or self.world.service))
 
     def clean(self, body):
         """Random ids and temporary folders are replaced by fixed values, so fixtures are stable."""
@@ -126,6 +136,18 @@ def scenarios(tmp_path):
         out["choose_done"] = c.post("/choose", json={"choice_id": choice["choice_id"], "option_id": pick}).json()
         out["choose_expired"] = c.post("/choose", json={"choice_id": choice["choice_id"], "option_id": pick}).json()
 
+    # browser: a search, a sign-in page, and a risky button
+    with scene.client(tool_json("search_chrome", query="AI tools"), actions=scene.browser(FakeWorker())) as c:
+        out["route_browser_search"] = c.post("/route", json={"text": "open chrome and search for AI tools"}).json()
+    login_worker = FakeWorker(login_hosts={"mail.google.com"})
+    with scene.client(tool_json("open_url", url="gmail"), actions=scene.browser(login_worker)) as c:
+        out["route_needs_login"] = c.post("/route", json={"text": "open my gmail"}).json()
+    click_worker = FakeWorker()
+    click_worker.do_open_chrome()
+    click_worker.buttons = [cand("Send")]
+    with scene.client(tool_json("click_text", text="send"), actions=scene.browser(click_worker)) as c:
+        out["route_browser_confirm_click"] = c.post("/route", json={"text": "click send"}).json()
+
     heard = VoiceService(FakeEngine("stt", wav=b"open chrome"), [FakeEngine("Piper", wav=make_wav(0.2))])
     with scene.client("", voice=heard) as c:
         out["voice_transcribe"] = c.post("/voice/transcribe", content=make_wav(1.0)).json()
@@ -166,7 +188,7 @@ def test_the_fields_the_app_decodes_are_present(tmp_path):
     choice_keys = {"choice_id", "prompt", "options"}
     option_keys = {"id", "label", "detail"}
     outcomes = {"allow", "confirm", "block", "dry_run"}
-    statuses = {"done", "failed", "not_available", "choose"}
+    statuses = {"done", "failed", "not_available", "choose", "needs_login"}
 
     for name, body in scenarios(tmp_path).items():
         if name == "error_503":
@@ -202,7 +224,7 @@ def test_a_done_result_always_comes_with_an_authorizing_decision(tmp_path):
         if not result or name.startswith("voice_"):
             continue
         decision = body["guard"] if "guard" in body else {k: v for k, v in body.items() if k != "result"}
-        if result["status"] in ("done", "not_available"):
+        if result["status"] in ("done", "not_available", "needs_login"):
             assert decision is not None and decision["authorized"] is True, name
         if result["status"] == "choose":
             assert decision is None, name

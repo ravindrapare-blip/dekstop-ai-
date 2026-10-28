@@ -33,7 +33,7 @@ if have node; then
   if [ "$major" -eq 20 ]; then ok "node $(node --version)"
   else note "node $(node --version) found; Node 20 LTS is the target for Monterey"; fi
 else
-  warn "node 20 LTS (brew install node@20), needed from phase 4"
+  warn "node 20 LTS (brew install node@20), needed for browser control"
 fi
 
 have ollama || note "ollama not found (needed from phase 1; see docs/install.md for the Monterey caveat)"
@@ -57,7 +57,7 @@ if have npm; then
   if (cd "$ROOT/browser" && npm install --no-audit --no-fund --silent); then
     ok "puppeteer-core installed (no Chromium download)"
   else
-    warn "npm install failed in browser/ (needed from phase 4; re-run after fixing)"
+    warn "npm install failed in browser/ (needed for browser control; re-run after fixing)"
   fi
 fi
 

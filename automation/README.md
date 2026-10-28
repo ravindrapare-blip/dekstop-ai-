@@ -7,7 +7,9 @@ Doing things on the Mac. Overview and setup: `docs/actions.md`.
 | `apps.py` | Lists installed apps from the standard folders and matches names |
 | `files.py` | Finds files and folders in a few safe folders, with limits |
 | `fuzzy.py` | Forgiving name matching (typos, aliases, type words) and the "one clear winner or ask" rule |
-| `service.py` | `prepare()` finds the real target, `execute()` does the action, choices for several matches |
+| `service.py` | `prepare()` finds the real target, `execute()` does the action |
+| `choices.py` | "Which one?" questions waiting for an answer; one store shared with the browser |
+| `results.py` | `ActionResult` (statuses done, failed, not_available, choose, needs_login) and `Prepared` |
 | `controller.py` | Opens, focuses and quits apps: Hammerspoon first, then AppleScript or `open` |
 | `hammerspoon.py` | Client for the Hammerspoon listener (token, localhost only) |
 | `applescript.py` | osascript with the app passed as an argument |

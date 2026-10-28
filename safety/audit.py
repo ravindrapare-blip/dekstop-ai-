@@ -8,9 +8,15 @@ MAX_BYTES = 2_000_000   # one backup is kept, so the log never grows without bou
 MAX_VALUE_CHARS = 80    # long values (note text, etc.) are cut so the log stays small and private
 
 
+REDACTED = {"value"}    # text typed into web pages can be private; the log records only how long it was
+
+
 def summarize_args(args: dict) -> dict:
     out = {}
     for key, value in args.items():
+        if key in REDACTED:
+            out[key] = f"<{len(value)} characters>" if isinstance(value, str) else "<hidden>"
+            continue
         text = value if isinstance(value, str) else repr(value)
         out[key] = text if len(text) <= MAX_VALUE_CHARS else text[:MAX_VALUE_CHARS] + "..."
     return out

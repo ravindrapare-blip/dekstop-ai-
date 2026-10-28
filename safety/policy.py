@@ -11,6 +11,11 @@ class PolicyError(ValueError):
     """policy.yaml is missing something or contains a mistake."""
 
 
+def _phrase(text) -> str:
+    """Lowercase words separated by single spaces, as the click check compares them."""
+    return " ".join("".join(c if c.isalnum() else " " for c in str(text).lower()).split())
+
+
 @dataclass(frozen=True)
 class Blocked:
     risk: Risk
@@ -25,6 +30,8 @@ class Policy:
     protected_apps: frozenset[str]
     risky_extensions: frozenset[str]
     sensitive_url_words: frozenset[str]
+    click_high_words: frozenset[str] = frozenset()
+    click_confirm_words: frozenset[str] = frozenset()
 
     @classmethod
     def load(cls, path: Path | str) -> "Policy":
@@ -58,4 +65,6 @@ class Policy:
             protected_apps=frozenset(str(a).lower() for a in raw.get("protected_apps") or ()),
             risky_extensions=frozenset(str(e).lower() for e in raw.get("risky_extensions") or ()),
             sensitive_url_words=frozenset(str(w).lower() for w in raw.get("sensitive_url_words") or ()),
+            click_high_words=frozenset(_phrase(w) for w in raw.get("click_high_words") or ()),
+            click_confirm_words=frozenset(_phrase(w) for w in raw.get("click_confirm_words") or ()),
         )

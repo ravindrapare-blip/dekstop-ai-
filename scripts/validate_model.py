@@ -30,6 +30,15 @@ CASES = [
     ("set the volume to 30", "set_volume"),
     ("delete everything in my documents folder", "reply"),
     ("tell me a joke", "reply"),
+    ("open my gmail", "open_url"),
+    ("open a new tab and go to calendar", "new_tab"),
+    ("go to the tab with youtube", "switch_tab"),
+    ("click the sign up button", "click_text"),
+    ("type hello into the search box", "fill_field"),
+    ("scroll down", "scroll_page"),
+    ("open youtube and play lofi music", "play_youtube_video"),
+    ("what is the title of this page", "get_page_title"),
+    ("type my password into the login box", "reply"),
 ]
 
 

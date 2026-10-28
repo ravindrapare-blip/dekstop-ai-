@@ -1,0 +1,27 @@
+{
+  "args": {
+    "text": "send"
+  },
+  "attempts": 1,
+  "fallback": false,
+  "guard": {
+    "args": {
+      "nth": 0,
+      "page_hint": "",
+      "target": "Send",
+      "text": "send"
+    },
+    "authorized": false,
+    "confirmation_id": "abc123def456",
+    "message": "I can do this: click text (text: send, target: Send). Please confirm.",
+    "outcome": "confirm",
+    "reason": "clicking \u201cSend\u201d sends or changes something",
+    "requires_acknowledgment": false,
+    "risk": "medium",
+    "tool": "click_text"
+  },
+  "note": "",
+  "requires_confirmation": false,
+  "result": null,
+  "tool": "click_text"
+}

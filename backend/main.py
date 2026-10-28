@@ -10,8 +10,8 @@ from pydantic import BaseModel, Field
 
 from backend.config import ROOT, load_config
 from backend.llm import ModelNotFound, OllamaClient, OllamaError, OllamaUnavailable, client_from_config
-from automation import ActionService, build_actions
 from automation.token import ensure_token
+from backend.actions import ActionRouter, build_router
 from backend.pipeline import Outcome, Pipeline
 from backend.router import MAX_INPUT_CHARS, Router
 from backend.startup import all_ok, run_checks
@@ -20,7 +20,7 @@ from safety import AuditLog, GuardrailManager, Policy
 from voice import VoiceError, VoiceService, voice_service_from_config
 from voice.audio import MAX_AUDIO_BYTES
 
-PHASE = 5
+PHASE = 6
 
 # How each speech problem is reported over HTTP.
 VOICE_STATUS = {
@@ -86,13 +86,13 @@ def create_app(
     llm: OllamaClient | None = None,
     guard: GuardrailManager | None = None,
     voice: VoiceService | None = None,
-    actions: ActionService | None = None,
+    actions: ActionRouter | None = None,     # anything with prepare/execute/choose/status
 ) -> FastAPI:
     cfg = cfg or load_config()
     llm = llm or client_from_config(cfg)
     guard = guard or build_guard(cfg)
     voice = voice or voice_service_from_config(cfg, ROOT)
-    actions = actions or build_actions(cfg, ROOT)
+    actions = actions or build_router(cfg, ROOT)
     pipeline = Pipeline(guard, actions)
     token_file = ROOT / cfg.get("automation", {}).get("token_file", "data/.token") if "automation" in cfg else None
     registry = build_registry()
@@ -115,6 +115,9 @@ def create_app(
             log.exception("startup checks failed unexpectedly")
         yield
         llm.close()
+        close = getattr(actions, "close", None)
+        if close is not None:
+            close()                  # stops the browser helper, which closes its Chrome window
 
     app = FastAPI(title="local-assistant", docs_url=None, redoc_url=None, lifespan=lifespan)
 

@@ -13,6 +13,7 @@ Rules:
 - If the request is unclear, no tool fits, or the user is just chatting, use the "reply" tool.
 - There are no tools to delete, rename or move files, change settings, or log in to websites. Use "reply" to explain.
 - Set requires_confirmation to true when the action changes or closes something.
+- For websites use the browser tools. Never type passwords or card numbers.
 
 Current local time: {now}
 
@@ -29,6 +30,7 @@ def _examples(now: datetime) -> list[tuple[str, ToolCall]]:
         ("open chrome", ToolCall("open_app", {"app_name": "Google Chrome"})),
         ("remind me at 6 pm to call mom",
          ToolCall("create_reminder", {"text": "call mom", "due_datetime": f"{today}T18:00:00"})),
+        ("open youtube and play lofi music", ToolCall("play_youtube_video", {"query": "lofi music"})),
         ("delete my old photos",
          ToolCall("reply", {"text": "I can't delete files. I can open the folder for you instead."})),
     ]

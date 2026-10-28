@@ -74,9 +74,13 @@ class _Assessment:
     reason: str
 
 
+INTERNAL_ARGS = {"nth", "tab_id", "page_hint", "field_kind"}    # bookkeeping, not worth showing the user
+
+
 def describe(call: Call) -> str:
     words = call.tool.replace("_", " ")
-    detail = ", ".join(f"{k}: {v}" for k, v in summarize_args(call.args).items())
+    shown = {k: v for k, v in summarize_args(call.args).items() if k not in INTERNAL_ARGS and v != ""}
+    detail = ", ".join(f"{k}: {v}" for k, v in shown.items())
     return f"{words} ({detail})" if detail else words
 
 

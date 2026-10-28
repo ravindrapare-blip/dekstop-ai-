@@ -1,0 +1,34 @@
+{
+  "args": {
+    "url": "gmail"
+  },
+  "attempts": 1,
+  "fallback": false,
+  "guard": {
+    "args": {
+      "url": "https://mail.google.com/"
+    },
+    "authorized": true,
+    "confirmation_id": null,
+    "message": "",
+    "outcome": "allow",
+    "reason": "open_url is a low-risk action",
+    "requires_acknowledgment": false,
+    "risk": "low",
+    "tool": "open_url"
+  },
+  "note": "",
+  "requires_confirmation": false,
+  "result": {
+    "choice": null,
+    "items": [
+      "Started Chrome",
+      "Opening mail.google.com",
+      "Page loaded"
+    ],
+    "message": "mail.google.com is asking you to sign in. I never type passwords or codes, so please sign in yourself in the Chrome window, then tell me to continue.",
+    "status": "needs_login",
+    "via": "chrome"
+  },
+  "tool": "open_url"
+}

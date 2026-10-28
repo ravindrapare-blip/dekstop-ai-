@@ -13,12 +13,16 @@ public enum Step: Equatable {
 
 private let inconsistent = "The assistant sent an inconsistent answer."
 
+/// Arguments that are bookkeeping, or private (text typed into a page), and so are not shown in a label.
+private let hiddenArguments: Set<String> = ["value", "page_hint", "field_kind"]
+
 /// "close_app" with {"app_name": "Safari"} becomes "close app (Safari)".
 public func summarize(tool: String, args: [String: JSONValue]) -> String {
     let words = tool.replacingOccurrences(of: "_", with: " ")
+    var seen = Set<String>()
     let details = args.keys.sorted().compactMap { key -> String? in
-        guard let value = args[key]?.stringValue, !value.isEmpty else { return nil }
-        return value
+        guard !hiddenArguments.contains(key), let value = args[key]?.stringValue, !value.isEmpty else { return nil }
+        return seen.insert(value.lowercased()).inserted ? value : nil      // "click text (Send, send)" would repeat itself
     }
     return details.isEmpty ? words : "\(words) (\(details.joined(separator: ", ")))"
 }
@@ -73,6 +77,10 @@ func plan(decision: GuardDecision?, result: ExecutionResult?, fallbackLabel: Str
     case .notAvailable:
         guard decision?.authorized == true else { return .invalid(inconsistent) }
         return .report(message: result.message, tone: .warning, lastAction: label.isEmpty ? nil : "\(label) (not run)")
+    case .needsLogin:
+        // The page wants the user to sign in. The assistant stops and waits; it never fills a password.
+        guard decision?.authorized == true else { return .invalid(inconsistent) }
+        return .report(message: result.message, tone: .warning, lastAction: label.isEmpty ? nil : "\(label) (waiting for you to sign in)")
     case .failed:
         // Either nothing was judged (a "not found", a cancelled or expired choice) or an authorized action failed.
         if let decision = decision, !decision.authorized { return .invalid(inconsistent) }

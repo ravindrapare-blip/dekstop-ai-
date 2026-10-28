@@ -6,6 +6,7 @@ final class ModelsAndPlanningTests: XCTestCase {
         "route_allow_open_app", "route_reply", "route_confirm_close_app", "route_confirm_high_risk", "route_block_url",
         "route_dry_run", "route_fallback", "route_not_found", "route_not_available", "route_search",
         "route_open_file", "route_choose_file", "choose_done", "choose_expired",
+        "route_browser_search", "route_needs_login", "route_browser_confirm_click",
     ]
 
     func testEveryBackendFixtureDecodes() throws {
@@ -103,6 +104,32 @@ final class ModelsAndPlanningTests: XCTestCase {
         XCTAssertTrue(label?.hasSuffix("(not run)") ?? false)
     }
 
+    func testASignInPageStopsAndWaitsForTheUser() throws {
+        let response = try Fixtures.route("route_needs_login")
+        XCTAssertEqual(response.result?.status, .needsLogin)
+        guard case .report(let message, let tone, let label) = plan(response) else { return XCTFail("expected a report") }
+        XCTAssertTrue(message.contains("sign in"))
+        XCTAssertEqual(tone, .warning)
+        XCTAssertTrue(label?.hasSuffix("(waiting for you to sign in)") ?? false)
+    }
+
+    func testABrowserActionIsReportedWithItsSteps() throws {
+        let response = try Fixtures.route("route_browser_search")
+        XCTAssertEqual(response.result?.status, .done)
+        XCTAssertEqual(response.result?.items.first, "Searching Google")
+        guard case .report(_, let tone, let label) = plan(response) else { return XCTFail("expected a report") }
+        XCTAssertEqual(tone, .success)
+        XCTAssertEqual(label, "search chrome (AI tools)")
+    }
+
+    func testARiskyClickAsksFirstAndTheLabelHidesBookkeeping() throws {
+        guard case .ask(let pending) = plan(try Fixtures.route("route_browser_confirm_click")) else { return XCTFail("expected a question") }
+        XCTAssertFalse(pending.requiresAcknowledgment)
+        XCTAssertEqual(pending.actionLabel, "click text (Send)")
+        XCTAssertEqual(summarize(tool: "fill_field", args: ["label": .string("Message"), "value": .string("private words"),
+                                                              "field_kind": .string("text"), "nth": .int(0)]), "fill field (Message)")
+    }
+
     func testReplyShowsItsText() throws {
         XCTAssertEqual(plan(try Fixtures.route("route_reply")), .reply("Hello there."))
         guard case .reply = plan(try Fixtures.route("route_fallback")) else { return XCTFail("expected reply") }
@@ -170,13 +197,13 @@ final class ModelsAndPlanningTests: XCTestCase {
         let confirm = GuardDecision(outcome: .confirm, authorized: false, tool: "close_app", confirmationId: "x")
         let dry = GuardDecision(outcome: .dryRun, authorized: false, tool: "close_app")
         for decision in [blocked, confirm, dry] {
-            for status in [ResultStatus.done, .notAvailable, .failed] {
+            for status in [ResultStatus.done, .notAvailable, .needsLogin, .failed] {
                 guard case .invalid = plan(decision: decision, result: result(status), fallbackLabel: "") else {
                     return XCTFail("\(status) beside \(decision.outcome) must not be shown")
                 }
             }
         }
-        for status in [ResultStatus.done, .notAvailable] {
+        for status in [ResultStatus.done, .notAvailable, .needsLogin] {
             guard case .invalid = plan(decision: nil, result: result(status), fallbackLabel: "x") else {
                 return XCTFail("\(status) with no decision at all must not be shown")
             }

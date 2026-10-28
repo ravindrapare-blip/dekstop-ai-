@@ -9,59 +9,18 @@ Nothing here calls the safety layer or decides what is allowed.
 """
 import logging
 import os
-import secrets
-import threading
 import time
-from dataclasses import dataclass, field
 
 from automation.apps import AppCatalog
+from automation.choices import ChoiceStore, Chosen
 from automation.controller import AppController
 from automation.files import FileFinder, Lookup
+from automation.results import ActionResult, Prepared
 
 log = logging.getLogger("assistant.actions")
 
 RESOLVED_TOOLS = ("open_app", "focus_app", "close_app", "open_file", "open_folder")
 APP_TOOLS = ("open_app", "focus_app", "close_app")
-CHOICE_TTL_SECONDS = 120
-MAX_PENDING_CHOICES = 5
-
-
-@dataclass
-class ActionResult:
-    status: str                                  # "done", "failed", "not_available" or "choose"
-    message: str
-    items: list = field(default_factory=list)    # lines for lists, such as search results
-    choice: dict | None = None                   # for "choose": {choice_id, prompt, options}
-    via: str = ""
-
-    def to_dict(self) -> dict:
-        return {"status": self.status, "message": self.message, "items": self.items,
-                "choice": self.choice, "via": self.via}
-
-
-@dataclass
-class Prepared:
-    kind: str                                    # "ready", "choose" or "failed"
-    args: dict | None = None                     # the call's arguments with names replaced by real targets
-    result: ActionResult | None = None           # for "choose" and "failed"
-
-
-@dataclass
-class Chosen:
-    tool: str
-    args: dict
-    requires_confirmation: bool
-    dry_run: bool | None = None      # a dry run stays a dry run after the user picks
-
-
-@dataclass
-class _Choice:
-    tool: str
-    arg_name: str
-    targets: dict                                # option id -> app name or absolute path
-    requires_confirmation: bool
-    expires_at: float
-    dry_run: bool | None = None
 
 
 def _listing(prefix: str, names: list[str], total: int) -> str:
@@ -71,13 +30,12 @@ def _listing(prefix: str, names: list[str], total: int) -> str:
 
 
 class ActionService:
-    def __init__(self, apps: AppCatalog, files: FileFinder, controller: AppController, *, clock=time.monotonic):
+    def __init__(self, apps: AppCatalog, files: FileFinder, controller: AppController, *,
+                 clock=time.monotonic, choices: ChoiceStore | None = None):
         self.apps = apps
         self.files = files
         self.controller = controller
-        self._clock = clock
-        self._choices: dict[str, _Choice] = {}
-        self._lock = threading.Lock()
+        self.choices = choices if choices is not None else ChoiceStore(clock=clock)    # not `or`: an empty store is falsy
 
     # -- step 1: find what the words refer to (read-only) -----------------------------------------------------
 
@@ -126,33 +84,11 @@ class ActionService:
 
     def _ask(self, tool: str, arg_name: str, targets: dict, shown: list, confirm: bool,
              dry_run: bool | None, prompt: str) -> Prepared:
-        choice_id = secrets.token_hex(6)
-        with self._lock:
-            self._purge()
-            while len(self._choices) >= MAX_PENDING_CHOICES:
-                self._choices.pop(next(iter(self._choices)))
-            self._choices[choice_id] = _Choice(tool, arg_name, targets, confirm, self._clock() + CHOICE_TTL_SECONDS, dry_run)
-        choice = {"choice_id": choice_id, "prompt": prompt, "options": shown}
-        return Prepared("choose", result=ActionResult("choose", prompt, choice=choice))
+        return self.choices.ask(tool, {i: {arg_name: v} for i, v in targets.items()}, shown, confirm, dry_run, prompt)
 
     def choose(self, choice_id: str, option_id: str | None) -> Chosen | ActionResult:
         """Resolve the user's pick. Passing no option cancels. The pick is still judged by the safety layer."""
-        with self._lock:
-            self._purge()
-            pending = self._choices.pop(choice_id, None)
-        if pending is None:
-            return ActionResult("failed", "That choice has expired. Please ask again.")
-        if option_id is None:
-            return ActionResult("failed", "Cancelled.")
-        target = pending.targets.get(option_id)
-        if target is None:
-            return ActionResult("failed", "That wasn't one of the options.")
-        return Chosen(pending.tool, {pending.arg_name: target}, pending.requires_confirmation, pending.dry_run)
-
-    def _purge(self) -> None:    # caller holds the lock
-        now = self._clock()
-        for cid in [c for c, p in self._choices.items() if p.expires_at <= now]:
-            del self._choices[cid]
+        return self.choices.resolve(choice_id, option_id)
 
     def status(self) -> dict:
         """For diagnostics: what the assistant can see and reach."""

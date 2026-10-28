@@ -138,6 +138,7 @@ public enum ResultStatus: String, Codable, Equatable {
     case failed
     case choose
     case notAvailable = "not_available"
+    case needsLogin = "needs_login"
 }
 
 /// What the backend did (or could not do) after the safety layer allowed it.

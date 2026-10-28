@@ -82,7 +82,8 @@ The app does not run anything. The backend finds the real app or file, asks the 
 
 ## Not connected yet
 
-- **Reminders, notes, browser actions:** those tools answer "That isn't something I can do yet, so nothing was done." until their phases.
+- **A sign-in page:** when a page needs you to sign in, the capsule says so and waits (it shows "waiting for you to sign in"). Sign in yourself in Chrome, then ask it to continue. The assistant never types passwords.
+- **Reminders and notes:** those tools answer "That isn't something I can do yet, so nothing was done." until their phase.
 - **Play Media** has no matching tool yet, so the assistant will answer that it can't.
 - **Answering confirmations by voice:** you still click Confirm or Cancel.
 

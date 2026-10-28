@@ -9,7 +9,7 @@ A lightweight, local-first desktop assistant for a **2017 MacBook Air running ma
 - **SQLite** for reminders and memory.
 - A safety gate in front of every action.
 
-**Status: phase 5.** The backend asks a local Ollama model to choose one tool, validates it, and passes it through a safety layer (risk levels, confirmation, dry-run, audit log). A native floating capsule UI (`app/`) shows it, and you can speak to it and hear replies, all locally (`docs/voice.md`). It can open, focus and quit apps and open and search files (`docs/actions.md`). Reminders, notes and browser actions are not built yet. See `docs/phases.md`, `docs/tools.md`, `safety/README.md` and `app/README.md`.
+**Status: phase 6.** The backend asks a local Ollama model to choose one tool, validates it, and passes it through a safety layer (risk levels, confirmation, dry-run, audit log). A native floating capsule UI (`app/`) shows it, and you can speak to it and hear replies, all locally (`docs/voice.md`). It can open, focus and quit apps and open and search files (`docs/actions.md`). It can drive Chrome: open sites, search, work with tabs, click, type, scroll and play YouTube videos, stopping at sign-in pages (`docs/browser.md`). Reminders and notes are not built yet. See `docs/phases.md`, `docs/tools.md`, `safety/README.md` and `app/README.md`.
 
 ## Layout
 
@@ -19,7 +19,8 @@ A lightweight, local-first desktop assistant for a **2017 MacBook Air running ma
 ├── pyproject.toml     Python dependencies
 ├── app/               SwiftUI floating capsule UI (macOS, Swift package)
 ├── backend/           orchestrator and API
-├── browser/           puppeteer-core worker
+├── browser/           puppeteer-core worker (Node)
+├── browserctl/        Python side of browser control
 ├── voice/             speech engines: whisper.cpp, Piper, macOS voice
 ├── automation/        opening apps and files: finder, Hammerspoon client and Lua
 ├── safety/            risk tiers, policy, approvals, audit

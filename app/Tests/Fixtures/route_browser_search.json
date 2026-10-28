@@ -1,0 +1,35 @@
+{
+  "args": {
+    "query": "AI tools"
+  },
+  "attempts": 1,
+  "fallback": false,
+  "guard": {
+    "args": {
+      "query": "AI tools"
+    },
+    "authorized": true,
+    "confirmation_id": null,
+    "message": "",
+    "outcome": "allow",
+    "reason": "search_chrome is a low-risk action",
+    "requires_acknowledgment": false,
+    "risk": "low",
+    "tool": "search_chrome"
+  },
+  "note": "",
+  "requires_confirmation": false,
+  "result": {
+    "choice": null,
+    "items": [
+      "Searching Google",
+      "Started Chrome",
+      "Opening www.google.com",
+      "Page loaded"
+    ],
+    "message": "Searched Google for \u201cAI tools\u201d.",
+    "status": "done",
+    "via": "chrome"
+  },
+  "tool": "search_chrome"
+}

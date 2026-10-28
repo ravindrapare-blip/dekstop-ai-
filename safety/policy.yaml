@@ -19,12 +19,21 @@ rules:
   search_files: low
   get_recent_files: low
   organize_desktop: medium
-  # browser
+  # browser. Clicking and typing are "low" here, but safety/checks.py raises them for risky buttons,
+  # sign-in and payment pages, and refuses password and card boxes outright.
+  open_chrome: low
   open_url: low
   search_chrome: low
   new_tab: low
   switch_tab: low
   close_tab: medium
+  click_text: low
+  fill_field: low
+  scroll_page: low
+  wait_for_page_load: low
+  get_page_title: low
+  get_current_url: low
+  play_youtube_video: low
   # reminder
   create_reminder: low
   list_reminders: low
@@ -108,3 +117,55 @@ sensitive_url_words:
   - payments
   - bank
   - banking
+
+# Buttons and links with these words (matched as whole words or phrases) need a confirmation to click.
+# "high" ones are destructive or spend money, so they also need the risk acknowledged.
+click_high_words:
+  - delete
+  - remove
+  - erase
+  - deactivate
+  - terminate
+  - uninstall
+  - pay
+  - pay now
+  - buy
+  - buy now
+  - purchase
+  - place order
+  - confirm order
+  - confirm payment
+  - complete purchase
+  - donate
+  - transfer
+  - withdraw
+  - send money
+click_confirm_words:
+  - send
+  - submit
+  - post
+  - publish
+  - confirm
+  - accept
+  - agree
+  - allow
+  - authorize
+  - approve
+  - subscribe
+  - unsubscribe
+  - checkout
+  - order
+  - reset
+  - share
+  - apply
+  - install
+  - download
+  - upload
+  - sign in
+  - signin
+  - log in
+  - login
+  - sign out
+  - signout
+  - log out
+  - logout

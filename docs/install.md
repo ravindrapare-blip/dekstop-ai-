@@ -76,7 +76,17 @@ scripts/setup_hammerspoon.sh        # then reload Hammerspoon's config from its 
 
 See `docs/actions.md`.
 
-## 7. Troubleshooting
+## 7. Browser (phase 6)
+
+Needs Node 18+ and Google Chrome. `install.sh` runs `npm install` in `browser/`; then:
+
+```bash
+.venv/bin/python scripts/browser_check.py
+```
+
+See `docs/browser.md`.
+
+## 8. Troubleshooting
 
 - **`python3: command not found`**: install Python with Homebrew and reopen the terminal.
 - **Port 8765 in use**: change `backend.port` in `config.yaml`.
