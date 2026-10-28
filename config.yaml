@@ -44,8 +44,10 @@ automation:
 
 safety:
   policy_file: safety/policy.yaml
-  approval_timeout_seconds: 60       # no answer means deny
-  audit_log: true
+  audit_file: data/logs/audit.jsonl  # every decision is written here before an action is authorized
+  approval_timeout_seconds: 60       # no answer means the request expires (nothing runs)
+  max_pending: 5                     # unanswered confirmations kept at once (oldest dropped)
+  dry_run: false                     # true: describe every action, run none
 
 data:
   database: data/assistant.db

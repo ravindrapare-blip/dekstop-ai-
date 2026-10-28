@@ -1,40 +1,110 @@
-# Safety policy, draft for phase 0. Enforced from phase 2.
-# Rule: an action not listed here does not exist (deny by default).
-# Tiers: 0 read-only, 1 reversible, 2 sensitive (approval each time), 3 forbidden.
+# Safety policy. Deny by default: a tool with no rule here can never run.
+#
+# Risk level -> what happens:
+#   low       runs automatically, always logged
+#   medium    asks first ("I can do this. Please confirm.")
+#   high      blocked by default; needs an explicit, acknowledged approval
+#   critical  never runs, nothing can unlock it
+#
+# Argument checks (safety/checks.py) can raise a tool's risk, never lower it.
 
-tiers:
-  0:
-    - memory.read
-    - reminders.list
-    - browser.read_page_text
-    - system.get_frontmost_app
-  1:
-    - memory.write
-    - reminders.create
-    - reminders.cancel
-    - app.open
-    - browser.open_allowed_url
-    - window.focus
-  2:
-    - browser.click
-    - browser.type_text
-    - app.quit
-    - file.move_to_trash
-  3:   # never offered to the model, never executable
-    - shell.run
-    - lua.eval
-    - file.delete_permanent
-    - browser.submit_payment
-    - browser.read_passwords
-    - system.change_security_settings
-    - system.install_software
+rules:
+  # app
+  open_app: low
+  focus_app: low
+  close_app: medium
+  # file
+  open_file: low
+  open_folder: low
+  search_files: low
+  get_recent_files: low
+  organize_desktop: medium
+  # browser
+  open_url: low
+  search_chrome: low
+  new_tab: low
+  switch_tab: low
+  close_tab: medium
+  # reminder
+  create_reminder: low
+  list_reminders: low
+  delete_reminder: medium
+  # note
+  save_note: low
+  list_notes: low
+  # system
+  reply: low
+  get_time: low
+  get_battery: low
+  set_volume: medium        # reversible and user-initiated, but it is a system setting
 
-browser:
-  allowed_domains: []        # empty means no browsing until the user adds domains
-  allow_downloads: false
-  use_dedicated_profile: true
+# Capabilities that are refused by name. None of these tools exist, so the model
+# cannot pick them; this list gives a clear refusal if anything ever asks.
+blocked:
+  delete_file:           {risk: high,     reason: deleting files is blocked by default}
+  delete_folder:         {risk: high,     reason: deleting folders is blocked by default}
+  empty_trash:           {risk: high,     reason: emptying the trash is blocked by default}
+  rename_file:           {risk: high,     reason: renaming files is blocked by default}
+  move_file:             {risk: high,     reason: moving files is blocked by default}
+  login_website:         {risk: high,     reason: logging in to websites needs your approval}
+  change_system_setting: {risk: high,     reason: changing system settings is blocked by default}
+  run_shell:             {risk: critical, reason: running shell commands is never allowed}
+  run_applescript:       {risk: critical, reason: running arbitrary scripts is never allowed}
+  run_lua:               {risk: critical, reason: running arbitrary code is never allowed}
+  install_software:      {risk: critical, reason: installing software is never allowed}
 
-untrusted_input:
-  # Web pages, files and clipboard text are data, never instructions.
-  can_raise_tier: false
-  can_skip_approval: false
+# Opening anything under these paths needs explicit approval (~ is your home folder).
+protected_paths:
+  - /System
+  - /Library
+  - /bin
+  - /sbin
+  - /usr
+  - /etc
+  - /var
+  - /private
+  - /dev
+  - ~/Library
+  - ~/.ssh
+  - ~/.aws
+  - ~/.gnupg
+
+# Closing these apps needs explicit approval.
+protected_apps: [finder, dock, loginwindow, systemuiserver, windowserver]
+
+# Opening files of these types can run code, so it needs explicit approval.
+risky_extensions:
+  - .app
+  - .command
+  - .sh
+  - .zsh
+  - .bash
+  - .tool
+  - .pkg
+  - .mpkg
+  - .dmg
+  - .scpt
+  - .scptd
+  - .applescript
+  - .workflow
+  - .terminal
+  - .jar
+  - .bat
+  - .exe
+
+# Web addresses containing these words look like login or payment pages and ask first.
+sensitive_url_words:
+  - login
+  - signin
+  - signon
+  - sso
+  - oauth
+  - auth
+  - password
+  - account
+  - accounts
+  - checkout
+  - payment
+  - payments
+  - bank
+  - banking

@@ -1,6 +1,6 @@
 # Architecture
 
-Status: **Phase 1 done** (Ollama runtime and tool calling). See `docs/tools.md`. Later components are still design only.
+Status: **Phases 0-2 done** (runtime, tool calling, safety layer). See `docs/tools.md` and `safety/README.md`. Later components are still design only.
 
 ## 1. Goals and constraints
 
@@ -21,7 +21,7 @@ A local-first desktop assistant for a **2017 MacBook Air (Intel, dual-core, no G
 | `voice/` | Python wrappers | child processes, on demand | Runs `whisper.cpp` (STT) and `piper` (TTS) as subprocesses |
 | `browser/` | Node.js, `puppeteer-core` | worker, started on demand | Drives the user's existing Chrome through a fixed set of actions |
 | `automation/` | Hammerspoon (Lua) | Hammerspoon itself | Executes a fixed set of named macOS actions |
-| `data/` | SQLite | file | Reminders, local memory, audit log |
+| `data/` | SQLite, JSON lines | files | Reminders, tasks, notes, memory (SQLite); audit log (`audit.jsonl`) |
 | Ollama | external binary | long-running, `127.0.0.1:11434` | Local LLM inference |
 
 ```
@@ -64,20 +64,20 @@ The model never executes anything itself. It only proposes actions from a fixed 
 
 ## 4. Safety model
 
-Detail lives in `safety/README.md` and `safety/policy.yaml`. The principles:
+Detail lives in `safety/README.md` and `safety/policy.yaml`. Implemented in phase 2. The principles:
 
 - **Deny by default.** An action that is not in the registry does not exist.
-- **Four risk tiers:** 0 read-only (auto), 1 reversible (auto + logged), 2 sensitive (approval each time), 3 forbidden (never offered).
+- **Four risk levels:** low (runs, logged), medium (asks first), high (blocked by default, needs acknowledged approval), critical (never).
 - **No free-form execution.** There is no "run this shell command" or "evaluate this Lua" tool. Open Interpreter is reference material for agent-loop ideas only; its arbitrary code execution is deliberately not adopted.
 - **Untrusted content stays data.** Web pages and file contents are not instructions. Text from them can never raise a tier or skip an approval.
 - **Approvals show the exact action** and its arguments, time out to "deny", and are never cached across actions.
 - **Local services are local.** Every service binds to `127.0.0.1` and requires a shared token from `data/.token`. Note that `hs.httpserver` listens on *all* interfaces by default, so the Hammerspoon side must call `setInterface("localhost")`.
-- **Audit log.** Every proposed action, decision and result is recorded in SQLite.
+- **Audit log.** Every decision is written to `data/logs/audit.jsonl` before it is returned. If it can't be written, nothing is authorized.
 - **Kill switch.** A global hotkey stops the backend's current task and closes the browser worker.
 
 ## 5. Data (SQLite, `data/assistant.db`)
 
-Three tables are planned: `reminders`, `memory`, `audit_log`. A draft is in `data/schema.sql`. It is not applied in phase 0. Memory is plain facts and preferences with timestamps. Retrieval starts as simple keyword search. No embedding model is run, to save RAM.
+Tables for reminders, tasks, notes, preferences and command history arrive in phase 7. A draft is in `data/schema.sql`. Memory is plain facts and preferences with timestamps. Retrieval starts as simple keyword search. No embedding model is run, to save RAM.
 
 ## 6. Resource budget (8 GB RAM, 2 cores)
 

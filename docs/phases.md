@@ -4,7 +4,7 @@
 |---|---|---|
 | 0 | Project structure, config, docs, startup scripts | done |
 | 1 | Ollama runtime, tool registry, JSON tool calling, startup checks, validation scripts | done |
-| 2 | Safety layer: guardrail manager, risk levels, confirmation flow, dry-run | |
+| 2 | Safety layer: guardrail manager, risk levels, confirmation flow, dry-run | done |
 | 3 | Floating capsule UI (SwiftUI) | |
 | 4 | Local voice input and output (whisper.cpp, Piper) | |
 | 5 | macOS app and file control (Hammerspoon, AppleScript) | |

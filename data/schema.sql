@@ -1,4 +1,4 @@
--- Draft schema. Not applied in phase 0; created in phase 2.
+-- Draft schema. Created in phase 7.
 
 CREATE TABLE IF NOT EXISTS reminders (
     id        INTEGER PRIMARY KEY,
@@ -15,12 +15,4 @@ CREATE TABLE IF NOT EXISTS memory (
     created_at TEXT   NOT NULL DEFAULT (datetime('now'))
 );
 
-CREATE TABLE IF NOT EXISTS audit_log (
-    id        INTEGER PRIMARY KEY,
-    at        TEXT    NOT NULL DEFAULT (datetime('now')),
-    action    TEXT    NOT NULL,
-    arguments TEXT    NOT NULL,            -- JSON
-    tier      INTEGER NOT NULL,
-    decision  TEXT    NOT NULL,            -- allowed | approved | denied | refused
-    result    TEXT
-);
+-- The audit log is a JSON-lines file (data/logs/audit.jsonl), not a table.

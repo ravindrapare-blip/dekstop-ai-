@@ -9,7 +9,7 @@ A lightweight, local-first desktop assistant for a **2017 MacBook Air running ma
 - **SQLite** for reminders and memory.
 - A safety gate in front of every action.
 
-**Status: phase 1.** The backend can ask a local Ollama model to choose one tool and returns validated JSON. Nothing is executed yet. See `docs/phases.md` and `docs/tools.md`.
+**Status: phase 2.** The backend asks a local Ollama model to choose one tool, validates it, and passes it through a safety layer (risk levels, confirmation, dry-run, audit log). Nothing is executed yet. See `docs/phases.md`, `docs/tools.md` and `safety/README.md`.
 
 ## Layout
 

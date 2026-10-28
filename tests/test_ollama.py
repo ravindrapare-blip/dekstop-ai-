@@ -4,10 +4,13 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
+from backend.config import ROOT
 from backend.llm import ModelNotFound, OllamaClient, OllamaError, OllamaUnavailable
 from backend.main import create_app
 from backend.startup import all_ok, model_installed, run_checks
+from safety import GuardrailManager, Policy
 
+POLICY = Policy.load(ROOT / "safety" / "policy.yaml")
 CFG = {
     "ollama": {"url": "http://127.0.0.1:11434", "model": "qwen2.5:3b", "keep_alive": "5m", "num_ctx": 2048},
     "router": {"max_retries": 1},
@@ -133,12 +136,12 @@ def test_missing_binary_is_fatal_only_if_the_server_is_also_down():
 # ---- HTTP API ----------------------------------------------------------------
 
 def api(handler):
-    return TestClient(create_app(CFG, make_client(handler)))
+    return TestClient(create_app(CFG, make_client(handler), guard=GuardrailManager(POLICY)))
 
 
 def test_api_health_status_tools():
     with api(ollama()) as c:
-        assert c.get("/health").json() == {"status": "ok", "phase": 1}
+        assert c.get("/health").json() == {"status": "ok", "phase": 2}
         status = c.get("/status").json()
         assert status["ready"] is True and status["model"] == "qwen2.5:3b"
         tools = c.get("/tools").json()
@@ -154,10 +157,11 @@ def test_api_status_when_model_missing():
 def test_api_route_success():
     with api(ollama()) as c:
         body = c.post("/route", json={"text": "open chrome"}).json()
-    assert body == {
+    assert {k: body[k] for k in ("tool", "args", "requires_confirmation", "fallback", "note", "attempts")} == {
         "tool": "open_app", "args": {"app_name": "Google Chrome"}, "requires_confirmation": False,
         "fallback": False, "note": "", "attempts": 1,
     }
+    assert body["guard"]["outcome"] == "allow" and body["guard"]["authorized"] is True
 
 
 def test_api_route_invalid_json_falls_back_without_error():
