@@ -5,6 +5,7 @@ Regenerate with:  UPDATE_APP_FIXTURES=1 .venv/bin/pytest tests/test_app_contract
 """
 import json
 import os
+from datetime import datetime
 
 import httpx
 from fastapi.testclient import TestClient
@@ -16,6 +17,8 @@ from automation.choices import ChoiceStore
 from backend.actions import ActionRouter
 from browserctl import BrowserService
 from fake_browser import FakeWorker, cand
+from memory import MemoryService
+from memory.store import MemoryStore
 from fakes import APPS, make_world
 from safety import GuardrailManager, Policy
 from test_voice import FakeEngine, make_wav
@@ -43,6 +46,13 @@ class Scene:
         choices = ChoiceStore()
         self.world.service.choices = choices
         return ActionRouter(self.world.service, BrowserService(worker, choices=choices), choices)
+
+    def memory(self, tmp_path):
+        """The desktop and browser services plus memory on a temporary database, with the clock fixed at 9 AM on 5 Jan 2026."""
+        choices = ChoiceStore()
+        self.world.service.choices = choices
+        service = MemoryService(MemoryStore(tmp_path / "memory.db"), choices=choices, clock=lambda: datetime(2026, 1, 5, 9, 0))
+        return ActionRouter(self.world.service, BrowserService(FakeWorker(), choices=choices), choices, service), service
 
     def client(self, model_output, ollama_down=False, voice=None, actions=None):
         def handler(request: httpx.Request) -> httpx.Response:
@@ -115,8 +125,8 @@ def scenarios(tmp_path):
     # actions: a missing app, an unbuilt tool, a search, an exact open
     with scene.client(tool_json("open_app", app_name="Photoshop")) as c:
         out["route_not_found"] = c.post("/route", json={"text": "open photoshop"}).json()
-    with scene.client(tool_json("create_reminder", text="call mom", due_datetime="2025-01-01T18:00:00")) as c:
-        out["route_not_available"] = c.post("/route", json={"text": "remind me"}).json()
+    with scene.client(tool_json("get_time")) as c:           # not built yet (phase 10)
+        out["route_not_available"] = c.post("/route", json={"text": "what time is it"}).json()
     write(docs / "budget.pdf")
     write(docs / "budget old.pdf")
     with scene.client(tool_json("search_files", query="budget")) as c:
@@ -147,6 +157,15 @@ def scenarios(tmp_path):
     click_worker.buttons = [cand("Send")]
     with scene.client(tool_json("click_text", text="send"), actions=scene.browser(click_worker)) as c:
         out["route_browser_confirm_click"] = c.post("/route", json={"text": "click send"}).json()
+
+    # memory: a reminder, and a list with several lines
+    router, memory = scene.memory(tmp_path / "mem")
+    with scene.client(tool_json("create_reminder", text="call mom", due_datetime="2026-01-05T18:00:00"), actions=router) as c:
+        out["route_create_reminder"] = c.post("/route", json={"text": "remind me at 6 PM to call mom"}).json()
+    memory.execute("create_task", {"title": "Write report", "due_date": "2026-01-06"})
+    memory.execute("create_task", {"title": "Buy milk"})
+    with scene.client(tool_json("list_tasks"), actions=router) as c:
+        out["route_list_tasks"] = c.post("/route", json={"text": "what are my tasks"}).json()
 
     heard = VoiceService(FakeEngine("stt", wav=b"open chrome"), [FakeEngine("Piper", wav=make_wav(0.2))])
     with scene.client("", voice=heard) as c:

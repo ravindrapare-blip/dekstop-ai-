@@ -18,7 +18,10 @@ dependencies = [
 dev = ["pytest>=8"]
 
 [tool.setuptools]
-packages = ["backend", "voice", "safety", "automation", "browserctl"]
+packages = ["backend", "voice", "safety", "automation", "browserctl", "memory"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.setuptools.package-data]
+memory = ["schema.sql"]

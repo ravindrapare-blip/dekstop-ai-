@@ -77,7 +77,7 @@ Detail lives in `safety/README.md` and `safety/policy.yaml`. Implemented in phas
 
 ## 5. Data (SQLite, `data/assistant.db`)
 
-Tables for reminders, tasks, notes, preferences and command history arrive in phase 7. A draft is in `data/schema.sql`. Memory is plain facts and preferences with timestamps. Retrieval starts as simple keyword search. No embedding model is run, to save RAM.
+Tables for reminders, tasks, notes, preferences and command history (`memory/schema.sql`, built in phase 7; see `docs/memory.md`). Memory is plain facts and preferences with timestamps. Retrieval is simple name matching. No embedding model is run, to save RAM.
 
 ## 6. Resource budget (8 GB RAM, 2 cores)
 

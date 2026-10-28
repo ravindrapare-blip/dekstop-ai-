@@ -8,7 +8,7 @@ MAX_BYTES = 2_000_000   # one backup is kept, so the log never grows without bou
 MAX_VALUE_CHARS = 80    # long values (note text, etc.) are cut so the log stays small and private
 
 
-REDACTED = {"value"}    # text typed into web pages can be private; the log records only how long it was
+REDACTED = {"value", "content", "details"}    # typed text, note text and task details are private; the log records only the length
 
 
 def summarize_args(args: dict) -> dict:

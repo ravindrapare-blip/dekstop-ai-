@@ -6,7 +6,7 @@ final class ModelsAndPlanningTests: XCTestCase {
         "route_allow_open_app", "route_reply", "route_confirm_close_app", "route_confirm_high_risk", "route_block_url",
         "route_dry_run", "route_fallback", "route_not_found", "route_not_available", "route_search",
         "route_open_file", "route_choose_file", "choose_done", "choose_expired",
-        "route_browser_search", "route_needs_login", "route_browser_confirm_click",
+        "route_browser_search", "route_needs_login", "route_browser_confirm_click", "route_create_reminder", "route_list_tasks",
     ]
 
     func testEveryBackendFixtureDecodes() throws {
@@ -128,6 +128,22 @@ final class ModelsAndPlanningTests: XCTestCase {
         XCTAssertEqual(pending.actionLabel, "click text (Send)")
         XCTAssertEqual(summarize(tool: "fill_field", args: ["label": .string("Message"), "value": .string("private words"),
                                                               "field_kind": .string("text"), "nth": .int(0)]), "fill field (Message)")
+    }
+
+    func testMemoryResultsAreReportedWithTheirLines() throws {
+        let made = try Fixtures.route("route_create_reminder")
+        guard case .report(let message, let tone, let label) = plan(made) else { return XCTFail("expected a report") }
+        XCTAssertEqual(message, "I'll remind you to call mom today 6:00 PM.")
+        XCTAssertEqual(tone, .success)
+        XCTAssertEqual(label, "create reminder (2026-01-05T18:00:00, call mom)")
+        let tasks = try Fixtures.route("route_list_tasks")
+        XCTAssertEqual(tasks.result?.items.count, 2)
+        XCTAssertEqual(tasks.result?.items.first, "#1  Write report — due tomorrow")
+    }
+
+    func testPrivateTextIsNotShownInAnActionLabel() {
+        XCTAssertEqual(summarize(tool: "save_note", args: ["title": .string("Diary"), "content": .string("private thoughts")]), "save note (Diary)")
+        XCTAssertEqual(summarize(tool: "create_task", args: ["title": .string("Visit"), "details": .string("12 Elm Street")]), "create task (Visit)")
     }
 
     func testReplyShowsItsText() throws {

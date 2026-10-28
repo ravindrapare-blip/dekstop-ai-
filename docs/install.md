@@ -86,7 +86,17 @@ Needs Node 18+ and Google Chrome. `install.sh` runs `npm install` in `browser/`;
 
 See `docs/browser.md`.
 
-## 8. Troubleshooting
+## 8. Reminders and memory (phase 7)
+
+Nothing to install. The first reminder notification may need permission in System Settings > Notifications (for Script Editor):
+
+```bash
+.venv/bin/python scripts/memory_check.py --notify
+```
+
+See `docs/memory.md`.
+
+## 9. Troubleshooting
 
 - **`python3: command not found`**: install Python with Homebrew and reopen the terminal.
 - **Port 8765 in use**: change `backend.port` in `config.yaml`.

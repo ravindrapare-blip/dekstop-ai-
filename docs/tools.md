@@ -36,14 +36,16 @@ Each tool has a default in its metadata. The model can set the flag to `true` bu
 | file | `open_file`, `open_folder`, `search_files`, `get_recent_files`, `organize_desktop`* |
 | browser | `open_chrome`, `open_url`, `search_chrome`, `new_tab`, `switch_tab`, `close_tab`*, `click_text`, `fill_field`, `scroll_page`, `wait_for_page_load`, `get_page_title`, `get_current_url`, `play_youtube_video` |
 | reminder | `create_reminder`, `list_reminders`, `delete_reminder`* |
-| note | `save_note`, `list_notes` |
+| task | `create_task`, `list_tasks`, `complete_task`, `plan_my_day` |
+| note | `save_note`, `list_notes`, `get_note` |
+| memory | `set_preference`, `get_preference` |
 | system | `reply`, `get_time`, `get_battery`, `set_volume`* |
 
 \* confirmation required by default. There are deliberately no tools to delete, rename or move files, run shell commands, or change security settings. `reply` is how the model answers, asks a question or declines.
 
 ## Adding a tool
 
-Add one `ToolSpec` to `backend/tool_defs.py`, with its parameters and a one-line description. Also add a rule for it in `safety/policy.yaml`: without one the tool can never run, and a test fails. It is then listed in the prompt, returned by `GET /tools` and accepted by the validator. Keep descriptions short: the whole prompt is about 780 tokens, and the context window is 2048.
+Add one `ToolSpec` to `backend/tool_defs.py`, with its parameters and a one-line description. Also add a rule for it in `safety/policy.yaml`: without one the tool can never run, and a test fails. It is then listed in the prompt, returned by `GET /tools` and accepted by the validator. Keep descriptions short: the whole prompt is about 980 tokens, and the context window is 2048.
 
 ## Model choice
 
@@ -53,7 +55,7 @@ Add one `ToolSpec` to `backend/tool_defs.py`, with its parameters and a one-line
 
 ```bash
 .venv/bin/python scripts/health_check.py     # Ollama installed, running, model pulled, backend up
-.venv/bin/python scripts/validate_model.py   # 21 sample requests: accuracy, JSON validity, speed
+.venv/bin/python scripts/validate_model.py   # 26 sample requests: accuracy, JSON validity, speed
 .venv/bin/python scripts/validate_model.py --model llama3.1:8b
 ```
 
@@ -61,6 +63,6 @@ Add one `ToolSpec` to `backend/tool_defs.py`, with its parameters and a one-line
 
 | Runs now | Not built yet |
 |---|---|
-| `open_app`, `focus_app`, `close_app`, `open_file`, `open_folder`, `search_files`, `get_recent_files`, the browser tools, `reply` | reminders and notes (phase 7), `organize_desktop` (phase 8), `get_time`, `get_battery`, `set_volume` |
+| `open_app`, `focus_app`, `close_app`, `open_file`, `open_folder`, `search_files`, `get_recent_files`, the browser tools, the reminder, task, note and memory tools, `reply` | `organize_desktop` (phase 8), `get_time`, `get_battery`, `set_volume` |
 
 A tool that is registered but not built answers "That isn't something I can do yet, so nothing was done."

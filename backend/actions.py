@@ -7,16 +7,24 @@ from automation.choices import ChoiceStore, Chosen
 from automation.results import ActionResult, Prepared
 from browserctl import BROWSER_TOOLS, BrowserService
 from browserctl.factory import build_browser
+from memory import MEMORY_TOOLS, MemoryService
+from memory.factory import build_memory
 
 
 class ActionRouter:
-    def __init__(self, desktop: ActionService, browser: BrowserService, choices: ChoiceStore) -> None:
+    def __init__(self, desktop: ActionService, browser: BrowserService, choices: ChoiceStore,
+                 memory: MemoryService | None = None) -> None:
         self.desktop = desktop
         self.browser = browser
         self.choices = choices
+        self.memory = memory
 
     def _owner(self, tool: str):
-        return self.browser if tool in BROWSER_TOOLS else self.desktop
+        if tool in BROWSER_TOOLS:
+            return self.browser
+        if tool in MEMORY_TOOLS and self.memory is not None:
+            return self.memory
+        return self.desktop
 
     def prepare(self, tool: str, args: dict, requires_confirmation: bool = False,
                 dry_run: bool | None = None) -> Prepared:
@@ -29,13 +37,28 @@ class ActionRouter:
         return self.choices.resolve(choice_id, option_id)
 
     def status(self) -> dict:
-        return self.desktop.status() | {"browser": self.browser.status()}
+        out = self.desktop.status() | {"browser": self.browser.status()}
+        return out | {"memory": self.memory.status()} if self.memory is not None else out
+
+    # memory features the backend uses around each request
+    def memory_context(self) -> str:
+        return self.memory.context_line() if self.memory is not None else ""
+
+    def record_command(self, text: str, tool: str, status: str) -> None:
+        if self.memory is not None:
+            self.memory.record_command(text, tool, status)
+
+    def start(self) -> None:
+        if self.memory is not None:
+            self.memory.start()
 
     def close(self) -> None:
         self.browser.close()
+        if self.memory is not None:
+            self.memory.close()
 
 
 def build_router(cfg: dict, root: Path) -> ActionRouter:
     choices = ChoiceStore()
     desktop = build_actions(cfg, root, choices)
-    return ActionRouter(desktop, build_browser(cfg, root, choices), choices)
+    return ActionRouter(desktop, build_browser(cfg, root, choices), choices, build_memory(cfg, root, choices))

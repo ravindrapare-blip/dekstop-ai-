@@ -9,7 +9,8 @@ from safety.policy import Policy
 from safety.risk import Risk
 
 # Args that name an app, path, address or query must be single-line, with no control characters.
-SINGLE_LINE_ARGS = {"app_name", "path_or_name", "url", "query", "tab", "label", "target", "direction", "page_hint", "field_kind"}
+SINGLE_LINE_ARGS = {"app_name", "path_or_name", "url", "query", "tab", "label", "target", "direction", "page_hint", "field_kind",
+                    "key", "title", "due_date", "due_datetime"}
 SCROLL_DIRECTIONS = ("up", "down", "top", "bottom")
 PAGE_HINTS = ("", "login", "payment")
 _CONTROL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")          # everything but tab and newline
@@ -83,6 +84,27 @@ def check_app(tool: str, value: str, policy: Policy) -> list[Finding]:
     if tool == "close_app" and value.lower().removesuffix(".app") in policy.protected_apps:
         return [Finding(Risk.HIGH, f"closing {value} can disrupt macOS")]
     return []
+
+
+# Preferences are plain, lightweight facts ("preferred browser: Chrome"). Secrets are never stored.
+_SECRET_WORDS = {"password", "passwords", "passwd", "passcode", "pin", "secret", "secrets", "token", "tokens",
+                 "cvv", "cvc", "ssn", "otp"}
+_SECRET_JOINED = ("apikey", "privatekey", "secretkey", "creditcard", "cardnumber", "socialsecurity", "recoverycode")
+_CARD_NUMBER = re.compile(r"(?<!\d)(?:\d[ -]?){13,19}(?!\d)")
+_LOOKS_LIKE_A_KEY = re.compile(r"^[A-Za-z0-9_+/=-]{32,}$")
+
+
+def check_preference(args: dict) -> list[Finding]:
+    key, value = args.get("key"), args.get("value")
+    findings = []
+    if isinstance(key, str):
+        tokens = [t for t in re.split(r"[^a-z0-9]+", key.lower()) if t]
+        if set(tokens) & _SECRET_WORDS or any(w in "".join(tokens) for w in _SECRET_JOINED):
+            findings.append(Finding(Risk.CRITICAL, "I don't store passwords, PINs, card numbers or secret keys"))
+    if isinstance(value, str) and (_CARD_NUMBER.search(value) or _LOOKS_LIKE_A_KEY.match(value.strip())
+                                   or "-----BEGIN" in value):
+        findings.append(Finding(Risk.CRITICAL, "that looks like a card number or secret key, which I don't store"))
+    return findings
 
 
 def _is_count(value) -> bool:
@@ -161,6 +183,8 @@ def check_args(tool: str, args: dict, policy: Policy) -> Finding | None:
     for name in ("nth", "tab_id"):
         if name in args and not _is_count(args[name]):
             findings.append(Finding(Risk.CRITICAL, f"{name} must be a number"))
+    if "id" in args and (not _is_count(args["id"]) or args["id"] < 1):
+        findings.append(Finding(Risk.CRITICAL, "id must be the number of an item"))
 
     if tool in ("open_file", "open_folder") and isinstance(args.get("path_or_name"), str):
         findings += check_path(args["path_or_name"], policy, opening_file=tool == "open_file")
@@ -170,6 +194,8 @@ def check_args(tool: str, args: dict, policy: Policy) -> Finding | None:
         findings += check_app(tool, args["app_name"], policy)
     elif tool in ("click_text", "fill_field", "scroll_page"):
         findings += check_browser(tool, args, policy)
+    elif tool == "set_preference":
+        findings += check_preference(args)
     elif tool == "set_volume":
         level = args.get("level")
         if not isinstance(level, int) or isinstance(level, bool) or not 0 <= level <= 100:

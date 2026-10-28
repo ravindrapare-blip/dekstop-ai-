@@ -1,23 +1,17 @@
 {
-  "args": {
-    "due_datetime": "2025-01-01T18:00:00",
-    "text": "call mom"
-  },
+  "args": {},
   "attempts": 1,
   "fallback": false,
   "guard": {
-    "args": {
-      "due_datetime": "2025-01-01T18:00:00",
-      "text": "call mom"
-    },
+    "args": {},
     "authorized": true,
     "confirmation_id": null,
     "message": "",
     "outcome": "allow",
-    "reason": "create_reminder is a low-risk action",
+    "reason": "get_time is a low-risk action",
     "requires_acknowledgment": false,
     "risk": "low",
-    "tool": "create_reminder"
+    "tool": "get_time"
   },
   "note": "",
   "requires_confirmation": false,
@@ -28,5 +22,5 @@
     "status": "not_available",
     "via": ""
   },
-  "tool": "create_reminder"
+  "tool": "get_time"
 }

@@ -25,6 +25,8 @@ Each tool's level is in `policy.yaml`. A tool with no rule cannot run (deny by d
 - typing into a password, card or one-time-code box: critical (never); typing or clicking on a sign-in page: medium, on a payment page: high
 - browser calls whose target was not identified on the page (`target`, `field_kind`): critical
 
+- remembering a password, PIN, card number or secret key as a preference: critical (never); ids that are not whole numbers: critical
+
 Blocked by default (see `blocked:` in `policy.yaml`): deleting files and folders, emptying trash, renaming or moving files, logging in to websites, changing system settings (high); shell commands, scripts, software installs (critical). None of these tools exist, so the model cannot select them. The list gives a clear refusal if anything ever asks.
 
 ## Flow
@@ -42,7 +44,7 @@ confirm(id, approved,     ->  ALLOW      exactly the call that was asked about, 
 - Approval authorizes the stored call only. The caller cannot swap in different arguments.
 - `confirm` re-checks the call, in case something changed since it was asked.
 - **Dry run:** `evaluate(call, dry_run=True)`, or `safety.dry_run: true` for everything. Nothing is authorized and no confirmation is created. Blocks stay blocks.
-- **Audit log:** every decision is written to `data/logs/audit.jsonl` *before* it is returned. If it can't be written, nothing is authorized. Values are cut to 80 characters; text typed into web pages (`value`) is recorded only as its length. The file is capped at about 2 MB with one backup.
+- **Audit log:** every decision is written to `data/logs/audit.jsonl` *before* it is returned. If it can't be written, nothing is authorized. Values are cut to 80 characters; text typed into web pages, note text, task details and preference values (`value`, `content`, `details`) are recorded only as their length. The file is capped at about 2 MB with one backup.
 
 ## HTTP
 

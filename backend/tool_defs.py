@@ -52,17 +52,27 @@ def build_registry() -> ToolRegistry:
                  "Play a video on YouTube: the first result for the query, or the one on the current page",
                  (Param("query", required=False),)))
 
-    # reminder tools
-    add(ToolSpec("create_reminder", Category.REMINDER, "Create a reminder",
-                 (Param("text"), Param("due_datetime", description="ISO 8601 local time"))))
+    # reminders, tasks, notes and memory (one local SQLite file)
+    add(ToolSpec("create_reminder", Category.REMINDER, "Create a reminder that pops up at a time",
+                 (Param("text"), Param("due_datetime", description="local time, ISO 8601"))))
     add(ToolSpec("list_reminders", Category.REMINDER, "List reminders"))
-    add(ToolSpec("delete_reminder", Category.REMINDER, "Delete a reminder by id",
-                 (Param("id", "int"),), requires_confirmation=True))
-
-    # note tools
-    add(ToolSpec("save_note", Category.NOTE, "Save a note",
+    add(ToolSpec("delete_reminder", Category.REMINDER, "Delete a reminder",
+                 (Param("id", "ref", description="its number, or some of its words"),), requires_confirmation=True))
+    add(ToolSpec("create_task", Category.TASK, "Add a to-do task",
+                 (Param("title"), Param("details", required=False), Param("due_date", required=False, description="YYYY-MM-DD"))))
+    add(ToolSpec("list_tasks", Category.TASK, "List open tasks"))
+    add(ToolSpec("complete_task", Category.TASK, "Mark a task as done",
+                 (Param("id", "ref", description="its number, or some of its words"),)))
+    add(ToolSpec("plan_my_day", Category.TASK, "Plan today from reminders and tasks"))
+    add(ToolSpec("save_note", Category.NOTE, "Save a note (added to a note with the same title)",
                  (Param("title"), Param("content"))))
     add(ToolSpec("list_notes", Category.NOTE, "List saved notes"))
+    add(ToolSpec("get_note", Category.NOTE, "Read a saved note",
+                 (Param("title", description="its title or number"),)))
+    add(ToolSpec("set_preference", Category.MEMORY, "Remember a preference or fact about the user",
+                 (Param("key", description="a few words, e.g. preferred browser"), Param("value"))))
+    add(ToolSpec("get_preference", Category.MEMORY, "Recall a remembered preference",
+                 (Param("key"),)))
 
     # system tools
     add(ToolSpec(REPLY, Category.SYSTEM,

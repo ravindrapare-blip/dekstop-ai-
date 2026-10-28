@@ -20,7 +20,7 @@ from safety import AuditLog, GuardrailManager, Policy
 from voice import VoiceError, VoiceService, voice_service_from_config
 from voice.audio import MAX_AUDIO_BYTES
 
-PHASE = 6
+PHASE = 7
 
 # How each speech problem is reported over HTTP.
 VOICE_STATUS = {
@@ -99,7 +99,9 @@ def create_app(
     unruled = sorted(t.name for t in registry.all() if t.name not in guard.policy.rules)
     if unruled:
         log.warning("tools with no safety rule can never run: %s", ", ".join(unruled))
-    router = Router(llm, registry, max_retries=cfg.get("router", {}).get("max_retries", 1))
+    router = Router(llm, registry, max_retries=cfg.get("router", {}).get("max_retries", 1),
+                    context=getattr(actions, "memory_context", None))
+    record_command = getattr(actions, "record_command", None)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
@@ -113,6 +115,9 @@ def create_app(
                 (log.info if r.ok else log.warning)("startup check %s: %s %s", r.name, r.detail, r.fix)
         except Exception:  # checks must never stop the backend from starting
             log.exception("startup checks failed unexpectedly")
+        start = getattr(actions, "start", None)
+        if start is not None:
+            start()                  # reminders start watching the clock
         yield
         llm.close()
         close = getattr(actions, "close", None)
@@ -159,6 +164,9 @@ def create_app(
             raise HTTPException(502, str(e)) from e
         call = routed.call
         outcome = pipeline.run(call.tool, call.args, call.requires_confirmation, req.dry_run)
+        if record_command is not None:
+            record_command(req.text, call.tool, (outcome.result.status if outcome.result
+                                                  else outcome.decision.outcome.value if outcome.decision else "question"))
         return envelope(
             outcome, fallback=routed.fallback, note=routed.note, attempts=routed.attempts,
             shown_args=call.args,    # what the model proposed; the judged (resolved) call is in "guard"

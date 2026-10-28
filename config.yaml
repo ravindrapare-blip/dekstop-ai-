@@ -67,5 +67,14 @@ safety:
   max_pending: 5                     # unanswered confirmations kept at once (oldest dropped)
   dry_run: false                     # true: describe every action, run none
 
+memory:
+  enabled: true
+  notifications: true        # macOS notification when a reminder is due (first time, allow it in System Settings > Notifications)
+  history: true              # keep a short log of what you asked (trimmed), so you can review or clear it
+  history_limit: 300         # oldest entries are dropped beyond this
+  history_days: 30           # and anything older than this
+  prompt_preferences: 8      # how many remembered preferences are shown to the model (0 = none)
+  # Everything is stored in the file below, on this Mac only, readable by you only.
+
 data:
   database: data/assistant.db

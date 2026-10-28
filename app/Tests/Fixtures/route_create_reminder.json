@@ -1,0 +1,32 @@
+{
+  "args": {
+    "due_datetime": "2026-01-05T18:00:00",
+    "text": "call mom"
+  },
+  "attempts": 1,
+  "fallback": false,
+  "guard": {
+    "args": {
+      "due_datetime": "2026-01-05T18:00:00",
+      "text": "call mom"
+    },
+    "authorized": true,
+    "confirmation_id": null,
+    "message": "",
+    "outcome": "allow",
+    "reason": "create_reminder is a low-risk action",
+    "requires_acknowledgment": false,
+    "risk": "low",
+    "tool": "create_reminder"
+  },
+  "note": "",
+  "requires_confirmation": false,
+  "result": {
+    "choice": null,
+    "items": [],
+    "message": "I'll remind you to call mom today 6:00 PM.",
+    "status": "done",
+    "via": "memory"
+  },
+  "tool": "create_reminder"
+}

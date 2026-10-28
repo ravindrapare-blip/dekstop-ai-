@@ -76,11 +76,11 @@ final class ControllerTests: XCTestCase {
 
     func testAToolThatIsNotBuiltYetSaysSo() async throws {
         let c = try make(.serving(["/route": "route_not_available"]))
-        c.submit("remind me")
+        c.submit("what time is it")
         await settle(c)
         XCTAssertEqual(c.state.tone, .warning)
         XCTAssertTrue(c.state.message.contains("nothing was done"))
-        XCTAssertEqual(c.state.lastAction, "create reminder (2025-01-01T18:00:00, call mom) (not run)")
+        XCTAssertEqual(c.state.lastAction, "get time (not run)")
     }
 
     func testBlockedRequestsAreRefused() async throws {

@@ -2,7 +2,7 @@
 from dataclasses import dataclass
 from enum import Enum
 
-PARAM_TYPES = ("str", "int", "bool")
+PARAM_TYPES = ("str", "int", "bool", "ref")     # ref: a number from a list, or some of the item's words
 
 
 class Category(str, Enum):
@@ -11,6 +11,8 @@ class Category(str, Enum):
     BROWSER = "browser"
     REMINDER = "reminder"
     NOTE = "note"
+    TASK = "task"
+    MEMORY = "memory"
     SYSTEM = "system"
 
 
@@ -38,7 +40,7 @@ class ToolSpec:
         parts = []
         for p in self.params:
             label = p.name + ("" if p.required else "?")
-            parts.append(label if p.type == "str" else f"{label}:{p.type}")
+            parts.append(label if p.type in ("str", "ref") else f"{label}:{p.type}")
         return f"{self.name}({', '.join(parts)})"
 
     def to_dict(self) -> dict:

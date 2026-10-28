@@ -142,7 +142,7 @@ def api(handler):
 
 def test_api_health_status_tools():
     with api(ollama()) as c:
-        assert c.get("/health").json() == {"status": "ok", "phase": 6}
+        assert c.get("/health").json() == {"status": "ok", "phase": 7}
         status = c.get("/status").json()
         assert status["ready"] is True and status["model"] == "qwen2.5:3b"
         tools = c.get("/tools").json()

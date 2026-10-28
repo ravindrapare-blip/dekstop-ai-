@@ -1,0 +1,29 @@
+{
+  "args": {},
+  "attempts": 1,
+  "fallback": false,
+  "guard": {
+    "args": {},
+    "authorized": true,
+    "confirmation_id": null,
+    "message": "",
+    "outcome": "allow",
+    "reason": "list_tasks is a low-risk action",
+    "requires_acknowledgment": false,
+    "risk": "low",
+    "tool": "list_tasks"
+  },
+  "note": "",
+  "requires_confirmation": false,
+  "result": {
+    "choice": null,
+    "items": [
+      "#1  Write report \u2014 due tomorrow",
+      "#2  Buy milk \u2014 no due date"
+    ],
+    "message": "You have 2 open tasks: Write report, Buy milk.",
+    "status": "done",
+    "via": "memory"
+  },
+  "tool": "list_tasks"
+}

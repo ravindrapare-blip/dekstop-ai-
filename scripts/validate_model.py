@@ -39,6 +39,11 @@ CASES = [
     ("open youtube and play lofi music", "play_youtube_video"),
     ("what is the title of this page", "get_page_title"),
     ("type my password into the login box", "reply"),
+    ("plan my day", "plan_my_day"),
+    ("remember I prefer Chrome", "set_preference"),
+    ("create a note about my project", "save_note"),
+    ("add a task to buy milk", "create_task"),
+    ("show my tasks", "list_tasks"),
 ]
 
 

@@ -49,6 +49,16 @@ def _coerce(spec: ToolSpec, param: Param, value: object) -> object:
         if len(value) > MAX_STR_LEN:
             raise ToolCallError(f"{where} is too long")
         return value
+    if param.type == "ref":
+        if isinstance(value, bool) or not isinstance(value, (int, str)):
+            raise ToolCallError(f"{where} must be a number or some words")
+        if isinstance(value, str):
+            value = value.strip()
+            if not value:
+                raise ToolCallError(f"{where} must not be empty")
+            if len(value) > MAX_STR_LEN:
+                raise ToolCallError(f"{where} is too long")
+        return value
     if param.type == "int":
         if isinstance(value, bool):
             raise ToolCallError(f"{where} must be an integer")

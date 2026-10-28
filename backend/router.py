@@ -29,11 +29,20 @@ def _reply(text: str, note: str, attempts: int = 0) -> RouteResult:
 
 
 class Router:
-    def __init__(self, llm: OllamaClient, registry: ToolRegistry, max_retries: int = 1, clock=datetime.now):
+    def __init__(self, llm: OllamaClient, registry: ToolRegistry, max_retries: int = 1, clock=datetime.now,
+                 context=None):
         self.llm = llm
         self.registry = registry
         self.max_retries = max(0, max_retries)
         self.clock = clock
+        self.context = context          # optional: returns a short line about the user, for the prompt
+
+    def _known_about_user(self) -> str:
+        try:
+            return self.context() if self.context else ""
+        except Exception:                    # remembering must never stop a request from working
+            log.warning("could not read preferences for the prompt")
+            return ""
 
     def route(self, user_text: str) -> RouteResult:
         """Raises OllamaError subclasses if the model cannot be reached."""
@@ -43,7 +52,7 @@ class Router:
         if len(text) > MAX_INPUT_CHARS:
             return _reply("That message is too long. Please shorten it.", "input too long")
 
-        messages = build_messages(self.registry, text, self.clock())
+        messages = build_messages(self.registry, text, self.clock(), self._known_about_user())
         reason = ""
         for attempt in range(1, self.max_retries + 2):
             result = self.llm.chat(messages)

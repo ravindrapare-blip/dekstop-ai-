@@ -34,13 +34,19 @@ rules:
   get_page_title: low
   get_current_url: low
   play_youtube_video: low
-  # reminder
+  # reminders, tasks, notes and memory (local only). Deleting asks first; the rest is reversible or read-only.
   create_reminder: low
   list_reminders: low
   delete_reminder: medium
-  # note
+  create_task: low
+  list_tasks: low
+  complete_task: low
+  plan_my_day: low
   save_note: low
   list_notes: low
+  get_note: low
+  set_preference: low
+  get_preference: low
   # system
   reply: low
   get_time: low

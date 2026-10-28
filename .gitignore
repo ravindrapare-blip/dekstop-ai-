@@ -4,10 +4,9 @@ __pycache__/
 node_modules/
 .DS_Store
 
-# runtime data (keep the folder and schema)
+# runtime data (the memory database, logs, the Chrome profile); the schema is memory/schema.sql
 data/*
 !data/.gitkeep
-!data/schema.sql
 
 # downloaded models
 *.bin
