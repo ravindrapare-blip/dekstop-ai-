@@ -6,12 +6,18 @@ backend:
   port: 8765             # log goes to data/logs/backend.log (set by scripts/start.sh)
 
 ollama:
-  url: http://127.0.0.1:11434
-  model: qwen2.5:1.5b    # starting point, benchmark in phase 1
+  url: http://127.0.0.1:11434   # must be a local address; the client refuses anything else
+  model: qwen2.5:3b      # any pulled model works, e.g. qwen2.5-coder:7b or llama3.1:8b
   keep_alive: 5m         # unload the model after 5 idle minutes
   num_ctx: 2048
+  num_predict: 256       # cap on reply length; a tool call is far shorter
+  timeout_seconds: 120   # slow CPUs need generous read timeouts
+  # Server-side limits, applied when the app starts Ollama itself (phase 9):
   max_loaded_models: 1
   num_parallel: 1
+
+router:
+  max_retries: 1         # one corrective retry when the model returns invalid JSON
 
 voice:
   enabled: false

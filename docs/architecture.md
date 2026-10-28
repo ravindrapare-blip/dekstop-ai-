@@ -1,6 +1,6 @@
 # Architecture
 
-Status: **Phase 0 (design and scaffolding).** Nothing here is implemented beyond a `/health` endpoint.
+Status: **Phase 1 done** (Ollama runtime and tool calling). See `docs/tools.md`. Later components are still design only.
 
 ## 1. Goals and constraints
 

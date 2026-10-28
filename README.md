@@ -9,7 +9,7 @@ A lightweight, local-first desktop assistant for a **2017 MacBook Air running ma
 - **SQLite** for reminders and memory.
 - A safety gate in front of every action.
 
-**Status: phase 0.** The project structure, configuration, docs and startup scripts exist. The backend only answers `/health`. See `docs/phases.md`.
+**Status: phase 1.** The backend can ask a local Ollama model to choose one tool and returns validated JSON. Nothing is executed yet. See `docs/phases.md` and `docs/tools.md`.
 
 ## Layout
 
@@ -41,12 +41,13 @@ curl http://127.0.0.1:8765/health
 ## Documents
 
 - `docs/architecture.md` : components, request flow, safety model, resource budget, compatibility findings
+- `docs/tools.md` : tool registry, JSON format, validation
 - `docs/install.md` : setup for Monterey
 - `docs/phases.md` : roadmap
 
 ## Compatibility warning
 
-Several upstream projects in `reference/` no longer support Monterey in their newest versions (Ollama needs macOS 14, Puppeteer `main` needs Node 22, Hammerspoon `main` targets macOS 13). The design pins older compatible versions. Details in `docs/architecture.md` section 7. Verify them in phase 1 before building on them.
+Several upstream projects in `reference/` no longer support Monterey in their newest versions (Ollama needs macOS 14, Puppeteer `main` needs Node 22, Hammerspoon `main` targets macOS 13). The design pins older compatible versions. Details in `docs/architecture.md` section 7. Verify them on your Mac with `scripts/health_check.py` (see `docs/install.md`).
 
 ## Reference code
 

@@ -10,7 +10,7 @@ from safety.risk import Risk
 def test_health():
     r = TestClient(app).get("/health")
     assert r.status_code == 200
-    assert r.json() == {"status": "ok", "phase": 0}
+    assert r.json() == {"status": "ok", "phase": 1}
 
 
 def test_config_loads_and_is_loopback_only():

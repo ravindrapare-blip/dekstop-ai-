@@ -43,15 +43,21 @@ Expected reply: `{"status":"ok","phase":0}`.
 
 Run the tests with `.venv/bin/pip install -e ".[dev]"` once, then `.venv/bin/pytest`.
 
-## 4. Optional preparation for later phases
+## 4. Ollama and the model (phase 1)
 
-None of these are required in phase 0.
-
-Pull a small model (the name is a starting point, to be benchmarked in phase 1):
+With Ollama installed and running (`ollama serve` or the app), pull the default model, then check everything:
 
 ```bash
-ollama pull qwen2.5:1.5b
+ollama pull qwen2.5:3b
+.venv/bin/python scripts/health_check.py
+.venv/bin/python scripts/validate_model.py
 ```
+
+`health_check.py` tells you exactly what is missing and how to fix it. `validate_model.py` reports accuracy and tokens per second on your Mac. To try another model, change `ollama.model` in `config.yaml` or pass `--model`.
+
+## 5. Optional preparation for later phases
+
+Not needed yet.
 
 Build whisper.cpp and fetch a small English model:
 
@@ -63,9 +69,11 @@ sh ./models/download-ggml-model.sh tiny.en
 
 Use `-j2` so the build does not starve the machine.
 
-## 5. Troubleshooting
+## 6. Troubleshooting
 
 - **`python3: command not found`**: install Python with Homebrew and reopen the terminal.
 - **Port 8765 in use**: change `backend.port` in `config.yaml`.
 - **Mac gets slow**: close Chrome, lower the model size, and keep `ollama.keep_alive` short in `config.yaml`.
 - **Logs**: `data/logs/backend.log`.
+- **`/route` returns 503**: Ollama is not running or the model is not pulled. Run `scripts/health_check.py`.
+- **First request is very slow**: the model is loading from disk. Later requests are faster until `keep_alive` expires.
