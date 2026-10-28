@@ -9,7 +9,7 @@ A lightweight, local-first desktop assistant for a **2017 MacBook Air running ma
 - **SQLite** for reminders and memory.
 - A safety gate in front of every action.
 
-**Status: phase 2.** The backend asks a local Ollama model to choose one tool, validates it, and passes it through a safety layer (risk levels, confirmation, dry-run, audit log). Nothing is executed yet. See `docs/phases.md`, `docs/tools.md` and `safety/README.md`.
+**Status: phase 3.** The backend asks a local Ollama model to choose one tool, validates it, and passes it through a safety layer (risk levels, confirmation, dry-run, audit log). A native floating capsule UI (`app/`) shows it. Nothing is executed yet, and voice is not connected. See `docs/phases.md`, `docs/tools.md`, `safety/README.md` and `app/README.md`.
 
 ## Layout
 
@@ -17,7 +17,7 @@ A lightweight, local-first desktop assistant for a **2017 MacBook Air running ma
 .
 ├── config.yaml        all settings
 ├── pyproject.toml     Python dependencies
-├── app/               SwiftUI floating UI
+├── app/               SwiftUI floating capsule UI (macOS, Swift package)
 ├── backend/           orchestrator and API
 ├── browser/           puppeteer-core worker
 ├── voice/             whisper.cpp and piper wrappers

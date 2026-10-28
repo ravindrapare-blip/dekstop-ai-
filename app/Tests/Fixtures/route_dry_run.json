@@ -1,0 +1,23 @@
+{
+  "args": {
+    "app_name": "Safari"
+  },
+  "attempts": 1,
+  "fallback": false,
+  "guard": {
+    "args": {
+      "app_name": "Safari"
+    },
+    "authorized": false,
+    "confirmation_id": null,
+    "message": "Dry run: I would close app (app_name: Safari). It would ask for your confirmation first. Nothing was done.",
+    "outcome": "dry_run",
+    "reason": "close_app is a medium-risk action",
+    "requires_acknowledgment": false,
+    "risk": "medium",
+    "tool": "close_app"
+  },
+  "note": "",
+  "requires_confirmation": true,
+  "tool": "close_app"
+}

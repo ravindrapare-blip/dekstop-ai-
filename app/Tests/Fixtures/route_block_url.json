@@ -1,0 +1,23 @@
+{
+  "args": {
+    "url": "javascript:alert(1)"
+  },
+  "attempts": 1,
+  "fallback": false,
+  "guard": {
+    "args": {
+      "url": "javascript:alert(1)"
+    },
+    "authorized": false,
+    "confirmation_id": null,
+    "message": "I can't do that: only http and https links are allowed, not javascript:.",
+    "outcome": "block",
+    "reason": "only http and https links are allowed, not javascript:",
+    "requires_acknowledgment": false,
+    "risk": "critical",
+    "tool": "open_url"
+  },
+  "note": "",
+  "requires_confirmation": false,
+  "tool": "open_url"
+}

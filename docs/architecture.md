@@ -1,6 +1,6 @@
 # Architecture
 
-Status: **Phases 0-2 done** (runtime, tool calling, safety layer). See `docs/tools.md` and `safety/README.md`. Later components are still design only.
+Status: **Phases 0-3 done** (runtime, tool calling, safety layer, capsule UI). See `docs/tools.md`, `safety/README.md` and `app/README.md`. Later components are still design only.
 
 ## 1. Goals and constraints
 
@@ -116,7 +116,7 @@ The reference repos are current `main` branches. Several no longer target Monter
 ├── README.md
 ├── config.yaml            # all tunables, no secrets
 ├── pyproject.toml         # Python backend dependencies
-├── app/                   # SwiftUI floating UI (phase 5)
+├── app/                   # SwiftUI floating capsule UI
 ├── backend/               # orchestrator, config, API
 ├── browser/               # puppeteer-core worker
 ├── voice/                 # whisper.cpp and piper wrappers

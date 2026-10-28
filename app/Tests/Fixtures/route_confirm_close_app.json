@@ -1,0 +1,23 @@
+{
+  "args": {
+    "app_name": "Safari"
+  },
+  "attempts": 1,
+  "fallback": false,
+  "guard": {
+    "args": {
+      "app_name": "Safari"
+    },
+    "authorized": false,
+    "confirmation_id": "abc123def456",
+    "message": "I can do this: close app (app_name: Safari). Please confirm.",
+    "outcome": "confirm",
+    "reason": "close_app is a medium-risk action",
+    "requires_acknowledgment": false,
+    "risk": "medium",
+    "tool": "close_app"
+  },
+  "note": "",
+  "requires_confirmation": true,
+  "tool": "close_app"
+}

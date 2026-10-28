@@ -1,0 +1,23 @@
+{
+  "args": {
+    "text": "I didn't understand that well enough to act. Could you rephrase it?"
+  },
+  "attempts": 1,
+  "fallback": true,
+  "guard": {
+    "args": {
+      "text": "I didn't understand that well enough to act. Could you rephrase it?"
+    },
+    "authorized": true,
+    "confirmation_id": null,
+    "message": "",
+    "outcome": "allow",
+    "reason": "reply is a low-risk action",
+    "requires_acknowledgment": false,
+    "risk": "low",
+    "tool": "reply"
+  },
+  "note": "invalid model output: output is not valid JSON",
+  "requires_confirmation": false,
+  "tool": "reply"
+}

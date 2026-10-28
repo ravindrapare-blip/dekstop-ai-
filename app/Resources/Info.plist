@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleIdentifier</key>
+    <string>local.assistant.capsule</string>
+    <key>CFBundleName</key>
+    <string>Assistant</string>
+    <key>CFBundleDisplayName</key>
+    <string>Assistant</string>
+    <key>CFBundleExecutable</key>
+    <string>Assistant</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>0.3.0</string>
+    <key>CFBundleVersion</key>
+    <string>3</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>12.0</string>
+    <!-- No Dock icon and no app menu: the assistant lives in the menu bar and the floating pill. -->
+    <key>LSUIElement</key>
+    <true/>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <!-- Only used when voice input arrives (phase 4). macOS shows this text in the permission prompt. -->
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Assistant listens to your voice only when you press the microphone button. Audio is processed on this Mac.</string>
+    <!-- The app talks to the backend over plain http on this Mac (127.0.0.1) and nowhere else. -->
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsLocalNetworking</key>
+        <true/>
+    </dict>
+</dict>
+</plist>

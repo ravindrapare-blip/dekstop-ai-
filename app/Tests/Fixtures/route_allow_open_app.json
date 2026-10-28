@@ -1,0 +1,23 @@
+{
+  "args": {
+    "app_name": "Google Chrome"
+  },
+  "attempts": 1,
+  "fallback": false,
+  "guard": {
+    "args": {
+      "app_name": "Google Chrome"
+    },
+    "authorized": true,
+    "confirmation_id": null,
+    "message": "",
+    "outcome": "allow",
+    "reason": "open_app is a low-risk action",
+    "requires_acknowledgment": false,
+    "risk": "low",
+    "tool": "open_app"
+  },
+  "note": "",
+  "requires_confirmation": false,
+  "tool": "open_app"
+}

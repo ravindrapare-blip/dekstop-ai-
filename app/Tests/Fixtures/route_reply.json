@@ -1,0 +1,23 @@
+{
+  "args": {
+    "text": "Hello there."
+  },
+  "attempts": 1,
+  "fallback": false,
+  "guard": {
+    "args": {
+      "text": "Hello there."
+    },
+    "authorized": true,
+    "confirmation_id": null,
+    "message": "",
+    "outcome": "allow",
+    "reason": "reply is a low-risk action",
+    "requires_acknowledgment": false,
+    "risk": "low",
+    "tool": "reply"
+  },
+  "note": "",
+  "requires_confirmation": false,
+  "tool": "reply"
+}

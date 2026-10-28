@@ -14,3 +14,7 @@ data/*
 *.onnx
 !reference/**/*.bin
 !reference/**/*.onnx
+
+# Swift build output
+app/.build/
+app/build/

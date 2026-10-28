@@ -1,0 +1,130 @@
+import Foundation
+
+public enum Phase: Equatable {
+    case idle
+    case listening
+    case thinking
+    case waiting      // waiting for the user to confirm or cancel
+    case executing
+    case done
+    case error
+
+    /// While busy the window must not auto-hide, and new requests are ignored.
+    public var isBusy: Bool {
+        switch self {
+        case .listening, .thinking, .waiting, .executing: return true
+        case .idle, .done, .error: return false
+        }
+    }
+}
+
+/// How a message should look. The window colors itself from this.
+public enum Tone: Equatable {
+    case neutral
+    case success
+    case warning
+    case error
+}
+
+/// A request the safety layer wants the user to approve.
+public struct PendingConfirmation: Equatable {
+    public let id: String
+    public let message: String
+    public let requiresAcknowledgment: Bool
+    public let actionLabel: String
+
+    public init(id: String, message: String, requiresAcknowledgment: Bool, actionLabel: String) {
+        self.id = id
+        self.message = message
+        self.requiresAcknowledgment = requiresAcknowledgment
+        self.actionLabel = actionLabel
+    }
+}
+
+public struct CapsuleState: Equatable {
+    public var phase: Phase = .idle
+    public var tone: Tone = .neutral
+    public var message: String = ""
+    public var lastAction: String = ""
+    public var pending: PendingConfirmation?
+
+    public init() {}
+
+    /// Shown as the input placeholder, so the state is readable without any animation.
+    public var placeholder: String {
+        switch phase {
+        case .idle: return "Ask me to do something…"
+        case .listening: return "Listening…"
+        case .thinking: return "Thinking…"
+        case .waiting: return "Waiting for your answer…"
+        case .executing: return "Working on it…"
+        case .done: return "Anything else?"
+        case .error: return "Something went wrong"
+        }
+    }
+}
+
+public enum Event: Equatable {
+    case started                                       // a request was sent
+    case listening
+    case listeningEnded
+    case notice(String, Tone)                          // a message with no request, e.g. voice unavailable
+    case waiting(PendingConfirmation)
+    case executing(String)                             // label of the action being run
+    case finished(message: String, tone: Tone, lastAction: String?)
+    case failed(String)
+    case dismissed                                     // the window was hidden
+}
+
+/// Pure state transitions. No I/O, so it is easy to test.
+public func reduce(_ state: CapsuleState, _ event: Event) -> CapsuleState {
+    var s = state
+    switch event {
+    case .started:
+        s.phase = .thinking
+        s.tone = .neutral
+        s.message = ""
+        s.pending = nil
+    case .listening:
+        s.phase = .listening
+        s.tone = .neutral
+        s.message = ""
+    case .listeningEnded:
+        if s.phase == .listening { s.phase = .idle }
+    case .notice(let text, let tone):
+        s.phase = .idle
+        s.tone = tone
+        s.message = text
+        s.pending = nil
+    case .waiting(let pending):
+        s.phase = .waiting
+        s.tone = .warning
+        s.message = pending.message
+        s.pending = pending
+    case .executing(let label):
+        s.phase = .executing
+        s.tone = .neutral
+        s.message = ""
+        s.pending = nil
+        s.lastAction = label
+    case .finished(let message, let tone, let lastAction):
+        s.phase = .done
+        s.tone = tone
+        s.message = message
+        s.pending = nil
+        if let lastAction = lastAction { s.lastAction = lastAction }
+    case .failed(let message):
+        s.phase = .error
+        s.tone = .error
+        s.message = message
+        s.pending = nil
+    case .dismissed:
+        // Hiding the window clears a finished result. Work in progress is kept.
+        if !s.phase.isBusy {
+            s.phase = .idle
+            s.tone = .neutral
+            s.message = ""
+        }
+    }
+    return s
+}

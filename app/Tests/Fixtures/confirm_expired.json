@@ -1,0 +1,11 @@
+{
+  "args": {},
+  "authorized": false,
+  "confirmation_id": "abc123def456",
+  "message": "I have nothing waiting for that confirmation.",
+  "outcome": "block",
+  "reason": "no pending action with that id (it may have expired)",
+  "requires_acknowledgment": false,
+  "risk": "critical",
+  "tool": ""
+}

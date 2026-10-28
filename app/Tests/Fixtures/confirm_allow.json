@@ -1,0 +1,13 @@
+{
+  "args": {
+    "app_name": "Safari"
+  },
+  "authorized": true,
+  "confirmation_id": null,
+  "message": "",
+  "outcome": "allow",
+  "reason": "close_app is a medium-risk action",
+  "requires_acknowledgment": false,
+  "risk": "medium",
+  "tool": "close_app"
+}
