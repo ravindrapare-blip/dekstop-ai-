@@ -2,9 +2,8 @@
 # Values are conservative defaults for a 2017 MacBook Air (2 cores, 8 GB RAM).
 
 backend:
-  host: 127.0.0.1        # never change to 0.0.0.0
-  port: 8765
-  log_file: data/logs/backend.log
+  host: 127.0.0.1        # must stay loopback; the backend refuses to start otherwise
+  port: 8765             # log goes to data/logs/backend.log (set by scripts/start.sh)
 
 ollama:
   url: http://127.0.0.1:11434
@@ -16,13 +15,14 @@ ollama:
 
 voice:
   enabled: false
+  # Paths are relative to the project root.
   whisper:
     binary: reference/whisper.cpp/build/bin/whisper-cli
-    model: models/ggml-tiny.en.bin
+    model: reference/whisper.cpp/models/ggml-tiny.en.bin
     threads: 2
   piper:
     binary: piper
-    voice: models/en_US-lessac-low.onnx
+    voice: data/models/en_US-lessac-low.onnx
 
 browser:
   enabled: false

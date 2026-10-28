@@ -54,7 +54,11 @@ ok "python dependencies installed in .venv"
 
 if have npm; then
   echo "Installing browser worker dependency"
-  (cd "$ROOT/browser" && npm install --no-audit --no-fund --silent) && ok "puppeteer-core installed (no Chromium download)"
+  if (cd "$ROOT/browser" && npm install --no-audit --no-fund --silent); then
+    ok "puppeteer-core installed (no Chromium download)"
+  else
+    warn "npm install failed in browser/ (needed from phase 4; re-run after fixing)"
+  fi
 fi
 
 echo "Done. Start with: scripts/start.sh"

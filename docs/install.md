@@ -39,6 +39,10 @@ curl http://127.0.0.1:8765/health
 
 Expected reply: `{"status":"ok","phase":0}`.
 
+`start.sh` waits for the health check and reports failure (for example, port already in use) instead of pretending it started.
+
+Run the tests with `.venv/bin/pip install -e ".[dev]"` once, then `.venv/bin/pytest`.
+
 ## 4. Optional preparation for later phases
 
 None of these are required in phase 0.
