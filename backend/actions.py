@@ -1,5 +1,6 @@
 """Sends each action to the part that can do it: Chrome actions to the browser service, everything else to the
 desktop service. The pipeline talks to this one object, so the safety flow is the same for both."""
+import logging
 from pathlib import Path
 
 from automation import ActionService, build_actions
@@ -11,6 +12,8 @@ from memory import MEMORY_TOOLS, MemoryService
 from memory.factory import build_memory
 from organizer import ORGANIZER_TOOLS, OrganizerService
 from organizer.factory import build_organizer
+
+log = logging.getLogger("assistant.backend")
 
 
 class ActionRouter:
@@ -62,9 +65,14 @@ class ActionRouter:
             self.memory.start()
 
     def close(self) -> None:
-        self.browser.close()
-        if self.memory is not None:
-            self.memory.close()
+        """Stops the browser helper and the reminder watcher. One failing never stops the other."""
+        for part in (self.browser, self.memory):
+            if part is None:
+                continue
+            try:
+                part.close()
+            except Exception:
+                log.exception("could not stop %s cleanly", type(part).__name__)
 
 
 def build_router(cfg: dict, root: Path) -> ActionRouter:

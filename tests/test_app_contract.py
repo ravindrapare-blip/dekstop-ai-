@@ -196,6 +196,15 @@ def scenarios(tmp_path):
             "confirmation_id": asked["guard"]["confirmation_id"], "approved": True}).json()
     sorted_scene = sorter
 
+    # what works right now: mostly fine, and not usable at all
+    with scene.client("", voice=VoiceService(FakeEngine("stt"), [FakeEngine("Piper")]), actions=scene.browser(FakeWorker())) as c:
+        full = c.get("/status").json()
+        out["status_degraded"] = {k: full[k] for k in ("ready", "state", "model", "components")}      # "checks" depends on this Mac's PATH
+    with scene.client("", ollama_down=True, voice=VoiceService(FakeEngine("stt"), [FakeEngine("Piper")]),
+                      actions=scene.browser(FakeWorker())) as c:
+        full = c.get("/status").json()
+        out["status_down"] = {k: full[k] for k in ("ready", "state", "model", "components")}
+
     heard = VoiceService(FakeEngine("stt", wav=b"open chrome"), [FakeEngine("Piper", wav=make_wav(0.2))])
     with scene.client("", voice=heard) as c:
         out["voice_transcribe"] = c.post("/voice/transcribe", content=make_wav(1.0)).json()
@@ -245,6 +254,11 @@ def test_the_fields_the_app_decodes_are_present(tmp_path):
             continue
         if name.startswith("voice_"):
             assert set(body) in ({"text"}, {"detail", "code"}), name
+            continue
+        if name.startswith("status_"):
+            assert set(body) == {"ready", "state", "model", "components"} and body["state"] in ("ready", "degraded", "down"), name
+            assert all(set(x) == {"name", "state", "detail", "fix", "core"} and x["state"] in ("ok", "warn", "off", "fail")
+                       for x in body["components"]), name
             continue
         if name.startswith("route_") or name.startswith("choose_"):
             assert set(body) == envelope_keys, name

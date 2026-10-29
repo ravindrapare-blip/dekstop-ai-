@@ -3,6 +3,7 @@ import logging
 from contextlib import asynccontextmanager
 
 import uvicorn
+import yaml
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
@@ -14,13 +15,15 @@ from automation.token import ensure_token
 from backend.actions import ActionRouter, build_router
 from backend.pipeline import Outcome, Pipeline
 from backend.router import MAX_INPUT_CHARS, Router
-from backend.startup import all_ok, run_checks
+from backend.startup import run_checks
+from backend.status import collect, overall
 from backend.tool_defs import build_registry
 from safety import AuditLog, GuardrailManager, Policy
+from safety.policy import PolicyError
 from voice import VoiceError, VoiceService, voice_service_from_config
 from voice.audio import MAX_AUDIO_BYTES
 
-PHASE = 8
+PHASE = 9
 
 # How each speech problem is reported over HTTP.
 VOICE_STATUS = {
@@ -118,11 +121,22 @@ def create_app(
         start = getattr(actions, "start", None)
         if start is not None:
             start()                  # reminders start watching the clock
+        try:
+            for c in collect(model_checks=run_checks(llm), guard=guard, actions=actions, voice=voice):
+                (log.info if c.state in ("ok", "off") else log.warning)("status %s: %s (%s) %s", c.name, c.state, c.detail, c.fix)
+        except Exception:
+            log.exception("could not summarize the startup status")
         yield
-        llm.close()
+        # Shutting down: uvicorn has stopped taking requests. Stop the helpers; one failing must not leave the others running.
+        log.info("shutting down")
         close = getattr(actions, "close", None)
-        if close is not None:
-            close()                  # stops the browser helper, which closes its Chrome window
+        for name, stop in (("actions", close), ("language model client", llm.close)):
+            if stop is None:
+                continue
+            try:
+                stop()               # the browser helper (and its Chrome window) and the reminder watcher stop here
+            except Exception:
+                log.exception("could not stop %s cleanly", name)
 
     app = FastAPI(title="local-assistant", docs_url=None, redoc_url=None, lifespan=lifespan)
 
@@ -130,10 +144,18 @@ def create_app(
     def health() -> dict:
         return {"status": "ok", "phase": PHASE}
 
+    @app.exception_handler(Exception)
+    async def unexpected(request: Request, error: Exception) -> JSONResponse:
+        log.exception("unexpected error in %s %s", request.method, request.url.path)     # details stay in the log
+        return JSONResponse(status_code=500, content={"detail": "The assistant hit an unexpected problem. Nothing else was changed."})
+
     @app.get("/status")
     def status() -> dict:
         results = run_checks(llm)
-        return {"ready": all_ok(results), "model": llm.model, "checks": [r.to_dict() for r in results]}
+        components = collect(model_checks=results, guard=guard, actions=actions, voice=voice)
+        state = overall(components)
+        return {"ready": state != "down", "state": state, "model": llm.model, "checks": [r.to_dict() for r in results],
+                "components": [c.to_dict() for c in components]}
 
     @app.get("/tools")
     def tools() -> list[dict]:
@@ -215,13 +237,40 @@ def create_app(
     return app
 
 
-app = create_app()
+def __getattr__(name: str):
+    """`backend.main:app` still works for `uvicorn backend.main:app`, but nothing is built just by importing this module."""
+    if name == "app":
+        return create_app()
+    raise AttributeError(name)
+
+
+def startup_problem(error: Exception) -> str:
+    """A failure while building the assistant, in words that say what to fix."""
+    if isinstance(error, PolicyError):
+        return f"safety/policy.yaml has a problem: {error}"
+    if isinstance(error, yaml.YAMLError):
+        return "config.yaml is not valid YAML. Fix it, or restore it from the project."
+    if isinstance(error, KeyError):
+        return f"config.yaml is missing the setting {error}."
+    if isinstance(error, OSError):
+        return f"a file the assistant needs can't be read ({error.strerror or type(error).__name__}): {error.filename or ''}".strip()
+    return str(error) or type(error).__name__
 
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-    cfg = load_config()["backend"]
-    uvicorn.run(app, host=check_host(cfg["host"]), port=cfg["port"], log_level="info")
+    try:
+        cfg = load_config()
+        host = check_host(cfg["backend"]["host"])
+        application = create_app(cfg)
+    except SystemExit:
+        raise
+    except Exception as e:
+        message = startup_problem(e)
+        log.error("The assistant could not start: %s", message)
+        raise SystemExit(f"The assistant could not start: {message}") from None
+    # Ten seconds are not needed to stop: in-flight requests get 5 and then the helpers are closed.
+    uvicorn.run(application, host=host, port=cfg["backend"]["port"], log_level="info", timeout_graceful_shutdown=5)
 
 
 if __name__ == "__main__":

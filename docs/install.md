@@ -100,7 +100,17 @@ See `docs/memory.md`.
 
 Nothing to install. Try it without risk first: set `safety.dry_run: true` in `config.yaml` (or send `"dry_run": true` to `/route`), say "organize my desktop", and read the preview. See `docs/organizer.md`.
 
-## 10. Troubleshooting
+## 10. Check everything
+
+```bash
+scripts/start.sh
+.venv/bin/python scripts/status.py            # what works right now
+.venv/bin/python scripts/validate_all.py    # the final validation; skipped checks are listed as not verified
+```
+
+See `docs/integration.md`.
+
+## 11. Troubleshooting
 
 - **`python3: command not found`**: install Python with Homebrew and reopen the terminal.
 - **Port 8765 in use**: change `backend.port` in `config.yaml`.

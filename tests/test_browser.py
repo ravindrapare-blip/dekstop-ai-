@@ -887,7 +887,7 @@ def test_the_api_runs_a_browser_action_end_to_end(tmp_path):
     app = create_app({"ollama": {}, "router": {"max_retries": 0}}, llm, guard=guard, actions=r)
     with TestClient(app) as c:
         body = c.post("/route", json={"text": "open chrome and search for AI tools"}).json()
-        assert c.get("/health").json()["phase"] == 8
+        assert c.get("/health").json()["phase"] == 9
         assert c.get("/automation/status").json()["browser"]["enabled"] is True
     assert body["result"]["status"] == "done" and body["result"]["message"] == "Searched Google for “AI tools”."
     assert body["guard"]["outcome"] == "allow" and body["result"]["items"][0] == "Searching Google"

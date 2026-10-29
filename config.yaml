@@ -12,6 +12,7 @@ ollama:
   num_ctx: 2048
   num_predict: 256       # cap on reply length; a tool call is far shorter
   timeout_seconds: 120   # slow CPUs need generous read timeouts
+  retries: 1             # one more try, after a short pause, if Ollama is still starting or has a hiccup (never after a timeout)
   # Server-side limits, applied when the app starts Ollama itself (phase 9):
   max_loaded_models: 1
   num_parallel: 1

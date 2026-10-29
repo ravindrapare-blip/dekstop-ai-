@@ -44,6 +44,10 @@ class ReminderScheduler:
             self._thread.join(timeout=5)
             self._thread = None
 
+    @property
+    def running(self) -> bool:
+        return self._thread is not None and self._thread.is_alive()
+
     def wake(self) -> None:
         """A reminder was added or removed: look at the schedule again."""
         self._wake.set()

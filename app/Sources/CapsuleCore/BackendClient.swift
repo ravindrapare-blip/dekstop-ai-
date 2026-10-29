@@ -96,6 +96,13 @@ public struct BackendClient {
         return result.1 == 200
     }
 
+    /// What works right now (`GET /status`). It asks Ollama too, so it can take a moment; call it when someone looks, not on a timer.
+    public func systemStatus() async throws -> SystemStatus {
+        var request = URLRequest(url: baseURL.appendingPathComponent("status"))
+        request.timeoutInterval = 10
+        return try decode(try await perform(request))
+    }
+
     public func route(text: String, dryRun: Bool? = nil) async throws -> RouteResponse {
         try await post("route", body: RouteBody(text: text, dry_run: dryRun))
     }

@@ -11,7 +11,7 @@
 | 6 | Browser automation (Puppeteer) | done, needs a first-run check on a Mac (`docs/browser.md`) |
 | 7 | Reminders, tasks, notes, local memory (SQLite) | done, needs a first-run check on a Mac (`docs/memory.md`) |
 | 8 | Safe desktop organization | done, needs a first-run check on a Mac (`docs/organizer.md`) |
-| 9 | Full integration and final validation script | |
+| 9 | Full integration and final validation script | done; run `scripts/validate_all.py` on the Mac (`docs/integration.md`) |
 | 10 | Polish, performance tuning, lightweight mode, safe mode | |
 
 Each phase ends with its own tests and a review pass before the next starts. Interfaces defined in `docs/architecture.md` change only after that document is updated.

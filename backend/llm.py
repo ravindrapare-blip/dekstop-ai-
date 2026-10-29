@@ -2,6 +2,8 @@
 from dataclasses import dataclass
 from urllib.parse import urlparse
 
+import time
+
 import httpx
 
 LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
@@ -10,9 +12,19 @@ LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
 class OllamaError(Exception):
     """Ollama answered, but not usefully (bad status, bad body, timeout)."""
 
+    transient = False       # True when trying again a moment later may well work
+
 
 class OllamaUnavailable(OllamaError):
-    """Ollama cannot be reached."""
+    """Ollama cannot be reached (it may be starting up)."""
+
+    transient = True
+
+
+class OllamaServerError(OllamaError):
+    """Ollama had a hiccup of its own (a 5xx answer, or the connection dropped mid-answer)."""
+
+    transient = True
 
 
 class ModelNotFound(OllamaError):
@@ -41,6 +53,9 @@ class OllamaClient:
         keep_alive: str = "5m",
         options: dict | None = None,
         transport: httpx.BaseTransport | None = None,
+        retries: int = 1,
+        retry_delay: float = 0.5,
+        sleep=time.sleep,
     ) -> None:
         if urlparse(url).hostname not in LOOPBACK_HOSTS:
             raise ValueError(f"ollama.url must be a local address, got {url!r}")
@@ -48,6 +63,9 @@ class OllamaClient:
         self.timeout = timeout
         self.keep_alive = keep_alive
         self.options = options or {}
+        self.retries = max(0, retries)
+        self.retry_delay = retry_delay
+        self._sleep = sleep
         self._http = httpx.Client(
             base_url=url, timeout=httpx.Timeout(timeout, connect=3.0), transport=transport
         )
@@ -63,7 +81,7 @@ class OllamaClient:
         except httpx.TimeoutException as e:
             raise OllamaError(f"Ollama timed out after {self.timeout:.0f}s") from e
         except httpx.HTTPError as e:
-            raise OllamaError(f"Ollama request failed: {e}") from e
+            raise OllamaServerError(f"Ollama request failed: {e}") from e
 
         if resp.status_code >= 400:
             try:
@@ -72,7 +90,7 @@ class OllamaClient:
                 detail = resp.text
             if resp.status_code == 404 and "not found" in str(detail).lower():
                 raise ModelNotFound(str(detail))
-            raise OllamaError(f"Ollama returned {resp.status_code}: {detail}")
+            raise (OllamaServerError if resp.status_code >= 500 else OllamaError)(f"Ollama returned {resp.status_code}: {detail}")
         try:
             data = resp.json()
         except ValueError as e:
@@ -80,6 +98,17 @@ class OllamaClient:
         if not isinstance(data, dict):
             raise OllamaError("Ollama returned an unexpected response")
         return data
+
+    def _with_retries(self, call):
+        """Tries again, after a short pause, only for hiccups that usually pass (Ollama still starting, a 5xx).
+        A timeout is not retried: it would only make the wait twice as long."""
+        for attempt in range(self.retries + 1):
+            try:
+                return call()
+            except OllamaError as e:
+                if not e.transient or attempt >= self.retries:
+                    raise
+                self._sleep(self.retry_delay * (attempt + 1))
 
     def version(self) -> str:
         return str(self._request("GET", "/api/version").get("version", "unknown"))
@@ -100,7 +129,7 @@ class OllamaClient:
         }
         if json_mode:
             payload["format"] = "json"
-        data = self._request("POST", "/api/chat", json=payload)
+        data = self._with_retries(lambda: self._request("POST", "/api/chat", json=payload))
         message = data.get("message")
         if not isinstance(message, dict) or not isinstance(message.get("content"), str):
             raise OllamaError("Ollama reply has no message content")
@@ -119,6 +148,7 @@ def client_from_config(cfg: dict) -> OllamaClient:
         o["model"],
         timeout=o.get("timeout_seconds", 120),
         keep_alive=o["keep_alive"],
+        retries=o.get("retries", 1),
         options={
             "temperature": 0,
             "num_ctx": o["num_ctx"],

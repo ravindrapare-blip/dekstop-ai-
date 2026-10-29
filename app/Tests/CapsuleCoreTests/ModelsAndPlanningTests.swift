@@ -154,6 +154,39 @@ final class ModelsAndPlanningTests: XCTestCase {
         XCTAssertEqual(tone, .success)
     }
 
+    func testTheStatusAnswerDecodesAndIsSummarized() throws {
+        let degraded: SystemStatus = try Fixtures.decode("status_degraded")
+        XCTAssertTrue(degraded.ready)
+        XCTAssertEqual(degraded.state, "degraded")
+        XCTAssertEqual(degraded.components.count, 8)
+        XCTAssertEqual(summarize(degraded), StatusSummary(tone: .warning, text: "Ready. Needs attention: Hammerspoon"))
+        let down: SystemStatus = try Fixtures.decode("status_down")
+        XCTAssertFalse(down.ready)
+        let summary = summarize(down)
+        XCTAssertEqual(summary.tone, .error)
+        XCTAssertTrue(summary.text.hasPrefix("Not ready: language model server, language model. Start it with"))
+    }
+
+    func testStatusSummariesForEveryState() {
+        XCTAssertEqual(summarize(SystemStatus(ready: true, state: "ready")), StatusSummary(tone: .success, text: "Everything is ready"))
+        XCTAssertEqual(summarize(SystemStatus(ready: true, state: "degraded")), StatusSummary(tone: .warning, text: "Ready"))
+        let many = (1...5).map { ComponentStatus(name: "part\($0)", state: "warn") }
+        XCTAssertEqual(summarize(SystemStatus(ready: true, state: "degraded", components: many)).text,
+                       "Ready. Needs attention: part1, part2, part3 and 2 more")
+        XCTAssertEqual(summarize(SystemStatus(ready: false, state: "down")).text, "Not ready: see details")
+        XCTAssertEqual(summarize(SystemStatus(ready: true, state: "something new")).tone, .warning)
+        let optionalOnly = SystemStatus(ready: true, state: "degraded", components: [ComponentStatus(name: "voice", state: "off")])
+        XCTAssertEqual(summarize(optionalOnly).text, "Ready")                       // a part that is switched off is not a problem
+    }
+
+    func testComponentLines() {
+        XCTAssertEqual(line(for: ComponentStatus(name: "memory", state: "ok", detail: "2 reminders")), "✓ memory: 2 reminders")
+        XCTAssertEqual(line(for: ComponentStatus(name: "browser", state: "warn", detail: "not installed")), "! browser: not installed")
+        XCTAssertEqual(line(for: ComponentStatus(name: "model", state: "fail", detail: "missing")), "✕ model: missing")
+        XCTAssertEqual(line(for: ComponentStatus(name: "voice", state: "off", detail: "turned off")), "– voice: turned off")
+        XCTAssertTrue(line(for: ComponentStatus(name: "x", state: "ok", detail: String(repeating: "a", count: 200))).hasSuffix("…"))
+    }
+
     func testPrivateTextIsNotShownInAnActionLabel() {
         XCTAssertEqual(summarize(tool: "save_note", args: ["title": .string("Diary"), "content": .string("private thoughts")]), "save note (Diary)")
         XCTAssertEqual(summarize(tool: "create_task", args: ["title": .string("Visit"), "details": .string("12 Elm Street")]), "create task (Visit)")

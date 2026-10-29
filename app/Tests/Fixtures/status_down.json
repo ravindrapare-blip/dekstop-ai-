@@ -1,0 +1,63 @@
+{
+  "components": [
+    {
+      "core": true,
+      "detail": "cannot connect to Ollama at http://127.0.0.1:11434",
+      "fix": "Start it with `ollama serve` (or open the Ollama app), then check again.",
+      "name": "language model server",
+      "state": "fail"
+    },
+    {
+      "core": true,
+      "detail": "cannot check 'm': server not running",
+      "fix": "Fix the server first.",
+      "name": "language model",
+      "state": "fail"
+    },
+    {
+      "core": true,
+      "detail": "38 tools have rules; everything else is refused",
+      "fix": "",
+      "name": "safety rules",
+      "state": "ok"
+    },
+    {
+      "core": false,
+      "detail": "6 apps found",
+      "fix": "",
+      "name": "apps and files",
+      "state": "ok"
+    },
+    {
+      "core": false,
+      "detail": "not answering; apps are opened with AppleScript and `open` instead",
+      "fix": "Optional: scripts/setup_hammerspoon.sh, then reload Hammerspoon.",
+      "name": "Hammerspoon",
+      "state": "warn"
+    },
+    {
+      "core": false,
+      "detail": "ready; the helper is running",
+      "fix": "",
+      "name": "browser",
+      "state": "ok"
+    },
+    {
+      "core": false,
+      "detail": "ready",
+      "fix": "",
+      "name": "speech to text",
+      "state": "ok"
+    },
+    {
+      "core": false,
+      "detail": "ready (Piper)",
+      "fix": "",
+      "name": "text to speech",
+      "state": "ok"
+    }
+  ],
+  "model": "m",
+  "ready": false,
+  "state": "down"
+}
