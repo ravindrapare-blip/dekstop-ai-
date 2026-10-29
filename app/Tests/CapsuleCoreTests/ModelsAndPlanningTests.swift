@@ -6,14 +6,14 @@ final class ModelsAndPlanningTests: XCTestCase {
         "route_allow_open_app", "route_reply", "route_confirm_close_app", "route_confirm_high_risk", "route_block_url",
         "route_dry_run", "route_fallback", "route_not_found", "route_not_available", "route_search",
         "route_open_file", "route_choose_file", "choose_done", "choose_expired",
-        "route_browser_search", "route_needs_login", "route_browser_confirm_click", "route_create_reminder", "route_list_tasks",
+        "route_browser_search", "route_needs_login", "route_browser_confirm_click", "route_create_reminder", "route_list_tasks", "route_organize_preview",
     ]
 
     func testEveryBackendFixtureDecodes() throws {
         for name in routeFixtures {
             XCTAssertNoThrow(try Fixtures.route(name), name)
         }
-        for name in ["confirm_done", "confirm_expired"] {
+        for name in ["confirm_done", "confirm_expired", "confirm_organize_done"] {
             XCTAssertNoThrow(try Fixtures.confirm(name), name)
         }
     }
@@ -139,6 +139,19 @@ final class ModelsAndPlanningTests: XCTestCase {
         let tasks = try Fixtures.route("route_list_tasks")
         XCTAssertEqual(tasks.result?.items.count, 2)
         XCTAssertEqual(tasks.result?.items.first, "#1  Write report — due tomorrow")
+    }
+
+    func testOrganizingShowsThePreviewAndAsksBeforeMoving() throws {
+        guard case .ask(let pending) = plan(try Fixtures.route("route_organize_preview")) else { return XCTFail("expected a question") }
+        XCTAssertTrue(pending.message.hasPrefix("In ~/Desktop I would move 3 files:"))
+        XCTAssertTrue(pending.message.contains("• Documents (new folder), 1: report.pdf"))
+        XCTAssertTrue(pending.message.hasSuffix("Nothing moves until you confirm."))
+        XCTAssertFalse(pending.requiresAcknowledgment)
+        XCTAssertEqual(pending.actionLabel, "organize desktop (/Users/me/Desktop)")
+        let done = try Fixtures.confirm("confirm_organize_done")
+        guard case .report(let message, let tone, _) = plan(done) else { return XCTFail("expected a report") }
+        XCTAssertTrue(message.hasPrefix("Moved 3 files in your Desktop folder"))
+        XCTAssertEqual(tone, .success)
     }
 
     func testPrivateTextIsNotShownInAnActionLabel() {

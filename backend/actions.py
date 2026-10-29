@@ -9,21 +9,26 @@ from browserctl import BROWSER_TOOLS, BrowserService
 from browserctl.factory import build_browser
 from memory import MEMORY_TOOLS, MemoryService
 from memory.factory import build_memory
+from organizer import ORGANIZER_TOOLS, OrganizerService
+from organizer.factory import build_organizer
 
 
 class ActionRouter:
     def __init__(self, desktop: ActionService, browser: BrowserService, choices: ChoiceStore,
-                 memory: MemoryService | None = None) -> None:
+                 memory: MemoryService | None = None, organizer: OrganizerService | None = None) -> None:
         self.desktop = desktop
         self.browser = browser
         self.choices = choices
         self.memory = memory
+        self.organizer = organizer
 
     def _owner(self, tool: str):
         if tool in BROWSER_TOOLS:
             return self.browser
         if tool in MEMORY_TOOLS and self.memory is not None:
             return self.memory
+        if tool in ORGANIZER_TOOLS and self.organizer is not None:
+            return self.organizer
         return self.desktop
 
     def prepare(self, tool: str, args: dict, requires_confirmation: bool = False,
@@ -38,7 +43,11 @@ class ActionRouter:
 
     def status(self) -> dict:
         out = self.desktop.status() | {"browser": self.browser.status()}
-        return out | {"memory": self.memory.status()} if self.memory is not None else out
+        if self.memory is not None:
+            out["memory"] = self.memory.status()
+        if self.organizer is not None:
+            out["organizer"] = self.organizer.status()
+        return out
 
     # memory features the backend uses around each request
     def memory_context(self) -> str:
@@ -61,4 +70,5 @@ class ActionRouter:
 def build_router(cfg: dict, root: Path) -> ActionRouter:
     choices = ChoiceStore()
     desktop = build_actions(cfg, root, choices)
-    return ActionRouter(desktop, build_browser(cfg, root, choices), choices, build_memory(cfg, root, choices))
+    return ActionRouter(desktop, build_browser(cfg, root, choices), choices, build_memory(cfg, root, choices),
+                        build_organizer(cfg, root, desktop.files))

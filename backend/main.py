@@ -20,7 +20,7 @@ from safety import AuditLog, GuardrailManager, Policy
 from voice import VoiceError, VoiceService, voice_service_from_config
 from voice.audio import MAX_AUDIO_BYTES
 
-PHASE = 7
+PHASE = 8
 
 # How each speech problem is reported over HTTP.
 VOICE_STATUS = {

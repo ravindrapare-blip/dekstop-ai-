@@ -5,7 +5,7 @@ Regenerate with:  UPDATE_APP_FIXTURES=1 .venv/bin/pytest tests/test_app_contract
 """
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import httpx
 from fastapi.testclient import TestClient
@@ -19,6 +19,8 @@ from browserctl import BrowserService
 from fake_browser import FakeWorker, cand
 from memory import MemoryService
 from memory.store import MemoryStore
+from organizer import OrganizerService
+from organizer.movelog import MoveLog
 from fakes import APPS, make_world
 from safety import GuardrailManager, Policy
 from test_voice import FakeEngine, make_wav
@@ -28,6 +30,8 @@ FIXTURES = ROOT / "app" / "Tests" / "Fixtures"
 POLICY = Policy.load(ROOT / "safety" / "policy.yaml")
 FIXED_ID = "abc123def456"
 FIXED_CHOICE = "c0ffee123456"
+FIXED_PLAN = "0123456789ab"
+ORGANIZE_NOW = datetime(2026, 1, 5, 9, 0, 0)
 
 
 def tool_json(tool, **args):
@@ -54,6 +58,19 @@ class Scene:
         service = MemoryService(MemoryStore(tmp_path / "memory.db"), choices=choices, clock=lambda: datetime(2026, 1, 5, 9, 0))
         return ActionRouter(self.world.service, BrowserService(FakeWorker(), choices=choices), choices, service), service
 
+    def organizer(self, tmp_path):
+        """The desktop service plus an organizer on this scene's pretend home folder, with the clock fixed."""
+        for name in ("report.pdf", "photo.jpg", "song.mp3"):
+            path = self.home / "Desktop" / name
+            path.write_text(name)
+            when = (ORGANIZE_NOW - timedelta(days=3)).timestamp()
+            os.utime(path, (when, when))
+        service = OrganizerService(MoveLog(tmp_path / "moves.jsonl"), files=self.world.service.files, home=self.home,
+                                   clock=lambda: ORGANIZE_NOW)
+        choices = ChoiceStore()
+        self.world.service.choices = choices
+        return ActionRouter(self.world.service, BrowserService(FakeWorker(), choices=choices), choices, None, service)
+
     def client(self, model_output, ollama_down=False, voice=None, actions=None):
         def handler(request: httpx.Request) -> httpx.Response:
             if ollama_down:
@@ -79,6 +96,8 @@ class Scene:
                         node[key] = FIXED_ID
                     elif key == "choice_id" and value:
                         node[key] = FIXED_CHOICE
+                    elif key == "plan_id" and value:
+                        node[key] = FIXED_PLAN
                     else:
                         walk(value)
             elif isinstance(node, list):
@@ -167,6 +186,16 @@ def scenarios(tmp_path):
     with scene.client(tool_json("list_tasks"), actions=router) as c:
         out["route_list_tasks"] = c.post("/route", json={"text": "what are my tasks"}).json()
 
+    # organizing: the preview comes first, the move only after the user confirms
+    sorter = Scene(tmp_path / "sort")
+    with sorter.client(json.dumps({"tool": "organize_desktop", "args": {}, "requires_confirmation": True}),
+                       actions=sorter.organizer(tmp_path / "sort-log")) as c:
+        asked = c.post("/route", json={"text": "organize my desktop"}).json()
+        out["route_organize_preview"] = asked
+        out["confirm_organize_done"] = c.post("/confirm", json={
+            "confirmation_id": asked["guard"]["confirmation_id"], "approved": True}).json()
+    sorted_scene = sorter
+
     heard = VoiceService(FakeEngine("stt", wav=b"open chrome"), [FakeEngine("Piper", wav=make_wav(0.2))])
     with scene.client("", voice=heard) as c:
         out["voice_transcribe"] = c.post("/voice/transcribe", content=make_wav(1.0)).json()
@@ -180,8 +209,9 @@ def scenarios(tmp_path):
         assert res.status_code == 503
         out["voice_error_503"] = res.json()
 
-    second = {"route_choose_file", "choose_done", "choose_expired"}
-    return {name: (other if name in second else scene).clean(body) for name, body in out.items()}
+    scenes = {"route_choose_file": other, "choose_done": other, "choose_expired": other,
+              "route_organize_preview": sorted_scene, "confirm_organize_done": sorted_scene}
+    return {name: scenes.get(name, scene).clean(body) for name, body in out.items()}
 
 
 def test_fixtures_match_the_backend(tmp_path):

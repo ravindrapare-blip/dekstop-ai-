@@ -1,0 +1,24 @@
+{
+  "args": {},
+  "attempts": 1,
+  "fallback": false,
+  "guard": {
+    "args": {
+      "count": 3,
+      "folder": "/Users/me/Desktop",
+      "plan_id": "0123456789ab"
+    },
+    "authorized": false,
+    "confirmation_id": "abc123def456",
+    "message": "In ~/Desktop I would move 3 files:\n\u2022 Documents (new folder), 1: report.pdf\n\u2022 Media (new folder), 1: song.mp3\n\u2022 Images (new folder), 1: photo.jpg\n\nNothing moves until you confirm.",
+    "outcome": "confirm",
+    "reason": "organize_desktop is a medium-risk action",
+    "requires_acknowledgment": false,
+    "risk": "medium",
+    "tool": "organize_desktop"
+  },
+  "note": "",
+  "requires_confirmation": true,
+  "result": null,
+  "tool": "organize_desktop"
+}

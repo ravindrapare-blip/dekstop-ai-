@@ -27,7 +27,9 @@ Each tool's level is in `policy.yaml`. A tool with no rule cannot run (deny by d
 
 - remembering a password, PIN, card number or secret key as a preference: critical (never); ids that are not whole numbers: critical
 
-Blocked by default (see `blocked:` in `policy.yaml`): deleting files and folders, emptying trash, renaming or moving files, logging in to websites, changing system settings (high); shell commands, scripts, software installs (critical). None of these tools exist, so the model cannot select them. The list gives a clear refusal if anything ever asks.
+- organizing: the real folder is judged like any path (protected or hidden folders are refused); more than 100 files in one go: high. `organize_desktop_trusted` is not a tool the model can pick: only a rule the user wrote in `config.yaml` produces it
+
+Blocked by default (see `blocked:` in `policy.yaml`): deleting files and folders, emptying trash, renaming or moving individual files (sorting a folder is the one exception, through the preview-and-confirm flow of `organize_desktop`), logging in to websites, changing system settings (high); shell commands, scripts, software installs (critical). None of these tools exist, so the model cannot select them. The list gives a clear refusal if anything ever asks.
 
 ## Flow
 

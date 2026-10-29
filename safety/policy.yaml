@@ -18,7 +18,8 @@ rules:
   open_folder: low
   search_files: low
   get_recent_files: low
-  organize_desktop: medium
+  organize_desktop: medium     # always shows a preview and asks
+  organize_desktop_trusted: low   # not a tool the model can pick: used only when a rule the user wrote in config.yaml covers the plan
   # browser. Clicking and typing are "low" here, but safety/checks.py raises them for risky buttons,
   # sign-in and payment pages, and refuses password and card boxes outright.
   open_chrome: low

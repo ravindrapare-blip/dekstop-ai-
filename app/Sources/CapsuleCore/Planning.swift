@@ -14,7 +14,7 @@ public enum Step: Equatable {
 private let inconsistent = "The assistant sent an inconsistent answer."
 
 /// Arguments that are bookkeeping, or private (text typed into a page), and so are not shown in a label.
-private let hiddenArguments: Set<String> = ["value", "content", "details", "page_hint", "field_kind"]
+private let hiddenArguments: Set<String> = ["value", "content", "details", "page_hint", "field_kind", "plan_id", "into_path", "rule"]
 
 /// "close_app" with {"app_name": "Safari"} becomes "close app (Safari)".
 public func summarize(tool: String, args: [String: JSONValue]) -> String {

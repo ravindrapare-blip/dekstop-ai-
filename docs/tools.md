@@ -33,7 +33,7 @@ Each tool has a default in its metadata. The model can set the flag to `true` bu
 | Category | Tools |
 |---|---|
 | app | `open_app`, `focus_app`, `close_app`* |
-| file | `open_file`, `open_folder`, `search_files`, `get_recent_files`, `organize_desktop`* |
+| file | `open_file`, `open_folder`, `search_files`, `get_recent_files`, `organize_desktop`* (preview first) |
 | browser | `open_chrome`, `open_url`, `search_chrome`, `new_tab`, `switch_tab`, `close_tab`*, `click_text`, `fill_field`, `scroll_page`, `wait_for_page_load`, `get_page_title`, `get_current_url`, `play_youtube_video` |
 | reminder | `create_reminder`, `list_reminders`, `delete_reminder`* |
 | task | `create_task`, `list_tasks`, `complete_task`, `plan_my_day` |
@@ -63,6 +63,6 @@ Add one `ToolSpec` to `backend/tool_defs.py`, with its parameters and a one-line
 
 | Runs now | Not built yet |
 |---|---|
-| `open_app`, `focus_app`, `close_app`, `open_file`, `open_folder`, `search_files`, `get_recent_files`, the browser tools, the reminder, task, note and memory tools, `reply` | `organize_desktop` (phase 8), `get_time`, `get_battery`, `set_volume` |
+| `open_app`, `focus_app`, `close_app`, `open_file`, `open_folder`, `search_files`, `get_recent_files`, the browser tools, the reminder, task, note and memory tools, `organize_desktop`, `reply` | `get_time`, `get_battery`, `set_volume` |
 
 A tool that is registered but not built answers "That isn't something I can do yet, so nothing was done."

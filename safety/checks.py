@@ -10,7 +10,8 @@ from safety.risk import Risk
 
 # Args that name an app, path, address or query must be single-line, with no control characters.
 SINGLE_LINE_ARGS = {"app_name", "path_or_name", "url", "query", "tab", "label", "target", "direction", "page_hint", "field_kind",
-                    "key", "title", "due_date", "due_datetime"}
+                    "key", "title", "due_date", "due_datetime",
+                    "folder", "only", "into", "into_path", "plan_id", "rule"}
 SCROLL_DIRECTIONS = ("up", "down", "top", "bottom")
 PAGE_HINTS = ("", "login", "payment")
 _CONTROL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")          # everything but tab and newline
@@ -167,6 +168,35 @@ def check_browser(tool: str, args: dict, policy: Policy) -> list[Finding]:
     return findings
 
 
+MANY_FILES = 100          # moving more than this many files at once needs the risk acknowledged
+
+
+def check_organize(tool: str, args: dict, policy: Policy) -> list[Finding]:
+    """The plan was built by the organizer from the real folder; judge that folder and how much it will touch."""
+    findings: list[Finding] = []
+    for name in ("folder", "into_path"):
+        value = args.get(name)
+        if isinstance(value, str) and value:
+            if not value.startswith("/"):
+                findings.append(Finding(Risk.CRITICAL, f"{name} must be a full folder path"))
+            else:
+                findings += check_path(value, policy, opening_file=False)
+                if any(part.startswith(".") for part in value.split("/")):
+                    findings.append(Finding(Risk.HIGH, "hidden folders are never organized"))
+    if "count" in args:
+        count = args["count"]
+        if not _is_count(count):
+            findings.append(Finding(Risk.CRITICAL, "count must be a number"))
+        elif count > MANY_FILES:
+            findings.append(Finding(Risk.HIGH, f"this would move more than {MANY_FILES} files"))
+    plan_id = args.get("plan_id")
+    if plan_id is not None and not (isinstance(plan_id, str) and re.fullmatch(r"[0-9a-f]{12}", plan_id)):
+        findings.append(Finding(Risk.CRITICAL, "plan_id is not valid"))
+    if tool.endswith("_trusted") and not (isinstance(args.get("rule"), str) and args["rule"].strip()):
+        findings.append(Finding(Risk.CRITICAL, "a trusted organize needs the rule that allows it"))
+    return findings
+
+
 def check_args(tool: str, args: dict, policy: Policy) -> Finding | None:
     """The most serious problem with these arguments, or None."""
     findings: list[Finding] = []
@@ -196,6 +226,8 @@ def check_args(tool: str, args: dict, policy: Policy) -> Finding | None:
         findings += check_browser(tool, args, policy)
     elif tool == "set_preference":
         findings += check_preference(args)
+    elif tool in ("organize_desktop", "organize_desktop_trusted"):
+        findings += check_organize(tool, args, policy)
     elif tool == "set_volume":
         level = args.get("level")
         if not isinstance(level, int) or isinstance(level, bool) or not 0 <= level <= 100:

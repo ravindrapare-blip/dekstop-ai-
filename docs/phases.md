@@ -10,7 +10,7 @@
 | 5 | macOS app and file control (Hammerspoon, AppleScript) | done, needs a first-run check on a Mac (`docs/actions.md`) |
 | 6 | Browser automation (Puppeteer) | done, needs a first-run check on a Mac (`docs/browser.md`) |
 | 7 | Reminders, tasks, notes, local memory (SQLite) | done, needs a first-run check on a Mac (`docs/memory.md`) |
-| 8 | Safe desktop organization | |
+| 8 | Safe desktop organization | done, needs a first-run check on a Mac (`docs/organizer.md`) |
 | 9 | Full integration and final validation script | |
 | 10 | Polish, performance tuning, lightweight mode, safe mode | |
 

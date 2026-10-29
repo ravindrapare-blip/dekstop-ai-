@@ -45,9 +45,19 @@ def ev(tool, dry_run=None, guard=None, **args):
 
 # ---- policy consistency --------------------------------------------------------
 
+INTERNAL_RULES = {"organize_desktop_trusted"}     # judged by the safety layer but never selectable by the model
+
+
 def test_every_tool_has_a_rule_and_every_rule_has_a_tool():
     tools = {t.name for t in build_registry().all()}
-    assert tools == set(POLICY.rules)
+    assert tools | INTERNAL_RULES == set(POLICY.rules)
+    assert not tools & INTERNAL_RULES
+
+
+def test_the_model_cannot_select_the_trusted_organize_tool():
+    from backend.toolcall import ToolCallError, parse_tool_call
+    with pytest.raises(ToolCallError, match="unknown tool"):
+        parse_tool_call('{"tool": "organize_desktop_trusted", "args": {"rule": "x"}}', build_registry())
 
 
 def test_blocked_capabilities_are_not_tools():

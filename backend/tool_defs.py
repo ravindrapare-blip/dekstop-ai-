@@ -24,7 +24,11 @@ def build_registry() -> ToolRegistry:
     add(ToolSpec("search_files", Category.FILE, "Search common folders for files",
                  (Param("query"),)))
     add(ToolSpec("get_recent_files", Category.FILE, "List recently used files"))
-    add(ToolSpec("organize_desktop", Category.FILE, "Plan how to sort Desktop files into folders",
+    add(ToolSpec("organize_desktop", Category.FILE,
+                 "Sort files in Desktop or Downloads into folders. Shows a preview and asks first",
+                 (Param("folder", required=False, description="Desktop (default) or Downloads"),
+                  Param("only", required=False, description="only this kind of file, e.g. PDFs"),
+                  Param("into", required=False, description="a folder to move them into (needs only)")),
                  requires_confirmation=True))
 
     # browser tools (Chrome, driven by browser/; page content is never given back to the model)

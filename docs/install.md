@@ -96,7 +96,11 @@ Nothing to install. The first reminder notification may need permission in Syste
 
 See `docs/memory.md`.
 
-## 9. Troubleshooting
+## 9. Organizing files (phase 8)
+
+Nothing to install. Try it without risk first: set `safety.dry_run: true` in `config.yaml` (or send `"dry_run": true` to `/route`), say "organize my desktop", and read the preview. See `docs/organizer.md`.
+
+## 10. Troubleshooting
 
 - **`python3: command not found`**: install Python with Homebrew and reopen the terminal.
 - **Port 8765 in use**: change `backend.port` in `config.yaml`.

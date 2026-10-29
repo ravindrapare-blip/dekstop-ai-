@@ -38,6 +38,7 @@ def _examples(now: datetime) -> list[tuple[str, ToolCall]]:
          ToolCall("create_reminder", {"text": "call mom", "due_datetime": f"{today}T18:00:00"})),
         ("remember I prefer Chrome", ToolCall("set_preference", {"key": "preferred browser", "value": "Chrome"})),
         ("plan my day", ToolCall("plan_my_day", {})),
+        ("sort my downloads into folders", ToolCall("organize_desktop", {"folder": "Downloads"}, requires_confirmation=True)),
         ("open youtube and play lofi music", ToolCall("play_youtube_video", {"query": "lofi music"})),
         ("delete my old photos",
          ToolCall("reply", {"text": "I can't delete files. I can open the folder for you instead."})),

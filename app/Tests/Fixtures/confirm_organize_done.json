@@ -1,0 +1,26 @@
+{
+  "args": {
+    "count": 3,
+    "folder": "/Users/me/Desktop",
+    "plan_id": "0123456789ab"
+  },
+  "authorized": true,
+  "confirmation_id": null,
+  "message": "",
+  "outcome": "allow",
+  "reason": "organize_desktop is a medium-risk action",
+  "requires_acknowledgment": false,
+  "result": {
+    "choice": null,
+    "items": [
+      "Documents (1): report.pdf",
+      "Media (1): song.mp3",
+      "Images (1): photo.jpg"
+    ],
+    "message": "Moved 3 files in your Desktop folder into Documents, Media, Images. To undo, run scripts/organize_undo.py.",
+    "status": "done",
+    "via": "files"
+  },
+  "risk": "medium",
+  "tool": "organize_desktop"
+}

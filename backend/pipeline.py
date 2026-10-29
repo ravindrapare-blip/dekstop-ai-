@@ -2,11 +2,11 @@
 
 Nothing is executed unless the safety layer authorized the exact call that is about to run.
 """
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from automation.service import ActionResult, ActionService
 from backend.toolcall import ToolCall
-from safety import Decision, GuardrailManager
+from safety import Decision, GuardrailManager, Outcome as GuardOutcome
 
 
 @dataclass
@@ -28,7 +28,20 @@ class Pipeline:
         prepared = self.actions.prepare(tool, args, requires_confirmation, dry_run)
         if prepared.kind != "ready":
             return Outcome(tool, args, requires_confirmation, None, prepared.result)
-        return self._judge_and_run(tool, prepared.args, requires_confirmation, dry_run)
+        confirm = requires_confirmation if prepared.requires_confirmation is None else prepared.requires_confirmation
+        outcome = self._judge_and_run(prepared.tool or tool, prepared.args, confirm, dry_run)
+        if prepared.preview and outcome.decision is not None:
+            outcome.decision = self._with_preview(outcome.decision, prepared.preview)
+        return outcome
+
+    @staticmethod
+    def _with_preview(decision: Decision, preview: str) -> Decision:
+        """When the user is asked (or it is a dry run), the question or description is the preview itself."""
+        if decision.outcome is GuardOutcome.CONFIRM:
+            return replace(decision, message=f"{preview}\n\nNothing moves until you confirm.")
+        if decision.outcome is GuardOutcome.DRY_RUN:
+            return replace(decision, message=f"Dry run. {preview}\n\nNothing was moved.")
+        return decision
 
     def choose(self, choice_id: str, option_id: str | None, dry_run: bool | None = None) -> Outcome:
         """The user picked one of several matches (or cancelled)."""

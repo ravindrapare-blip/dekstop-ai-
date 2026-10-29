@@ -27,3 +27,6 @@ class Prepared:
     kind: str                                    # "ready", "choose" or "failed"
     args: dict | None = None                     # the call's arguments with names replaced by real targets
     result: ActionResult | None = None           # for "choose" and "failed"
+    preview: str = ""                            # what would happen, shown when the user is asked (or in a dry run)
+    tool: str | None = None                      # judge this tool instead of the one the model chose (see organizer/)
+    requires_confirmation: bool | None = None    # replaces the model's flag, when set
