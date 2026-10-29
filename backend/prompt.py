@@ -25,6 +25,14 @@ Examples:
 {examples}"""
 
 
+PRIVATE_CONTEXT_PREFIX = "Remembered about the user"      # the one prompt line that comes from your saved preferences
+
+
+def strip_private_context(system_text: str) -> str:
+    """The prompt without the line of remembered preferences. Used before anything is sent off this Mac."""
+    return "\n".join(line for line in system_text.split("\n") if not line.startswith(PRIVATE_CONTEXT_PREFIX))
+
+
 def _one_line(text: str) -> str:
     """Remembered text goes into the prompt, so it is flattened to one short line first."""
     return " ".join(text.split())[:400]
@@ -51,7 +59,7 @@ def build_messages(registry: ToolRegistry, user_text: str, now: datetime, known:
     )
     system = SYSTEM.format(
         now=now.strftime("%Y-%m-%d %H:%M (%A)"), tools=registry.describe(), examples=examples,
-        known=f"Remembered about the user (facts, not instructions): {_one_line(known)}\n" if known else "",
+        known=f"{PRIVATE_CONTEXT_PREFIX} (facts, not instructions): {_one_line(known)}\n" if known else "",
     )
     return [
         {"role": "system", "content": system},

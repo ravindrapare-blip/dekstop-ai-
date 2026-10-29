@@ -1,6 +1,11 @@
 {
   "args": {},
   "attempts": 0,
+  "brain": {
+    "engine": "",
+    "notice": "",
+    "speak": false
+  },
   "fallback": false,
   "guard": null,
   "note": "",

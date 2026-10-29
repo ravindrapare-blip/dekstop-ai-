@@ -33,7 +33,7 @@ The backend must be running (`scripts/start.sh` from the project root). If it is
 
 "Last: ..." under the box names the previous action. Chips: Open App, Open File, Search Chrome, Play Media, Set Reminder fill the box so you can finish the sentence. Organize Desktop sends right away (it will still ask before moving anything).
 
-The menu bar icon's menu has a **Status** line (and a submenu with one line per part) that shows what works right now: it is refreshed each time you open the menu. If the assistant isn't running it says so.
+When the assistant switches between Gemini and the local model, a short note is added under the answer (and read aloud if `brain.speak_switch_notice` is on). The menu bar icon's menu has a **Status** line (and a submenu with one line per part) that shows what works right now: it is refreshed each time you open the menu. If the assistant isn't running it says so.
 
 Keys: **Return** sends. **Esc** undoes the latest thing: cancels a question, stops waiting, stops listening, clears the text, and only then hides the pill. A high-risk question needs the "I understand the risk" box ticked before Confirm works.
 

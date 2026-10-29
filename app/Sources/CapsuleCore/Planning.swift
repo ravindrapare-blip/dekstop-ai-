@@ -99,3 +99,23 @@ public func plan(_ response: RouteResponse) -> Step {
 public func plan(_ response: ConfirmResponse) -> Step {
     plan(decision: response.decision, result: response.result, fallbackLabel: "")
 }
+
+/// Adds something the user should hear once ("I switched to the local model") to whatever is about to be shown,
+/// without losing or changing the result itself. Anything that isn't shown as text is left as it is.
+public func adding(notice: String, to step: Step) -> Step {
+    let note = notice.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !note.isEmpty else { return step }
+    func joined(_ text: String) -> String { text.isEmpty ? note : "\(text)\n\n\(note)" }
+    switch step {
+    case .reply(let text): return .reply(joined(text))
+    case .report(let message, let tone, let last): return .report(message: joined(message), tone: tone, lastAction: last)
+    case .refuse(let text): return .refuse(joined(text))
+    case .preview(let text): return .preview(joined(text))
+    case .ask(let pending):
+        return .ask(PendingConfirmation(id: pending.id, message: joined(pending.message),
+                                        requiresAcknowledgment: pending.requiresAcknowledgment, actionLabel: pending.actionLabel))
+    case .choose(let choice):
+        return .choose(ChoicePrompt(choiceId: choice.choiceId, prompt: joined(choice.prompt), options: choice.options))
+    case .invalid: return step
+    }
+}

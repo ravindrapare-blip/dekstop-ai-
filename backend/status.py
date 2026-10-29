@@ -49,14 +49,14 @@ def _safe(name: str, make) -> list[Component]:
         return [Component(name, FAIL, f"the check itself failed ({type(e).__name__})")]
 
 
-def from_model_checks(results: list[CheckResult]) -> list[Component]:
-    """The Ollama checks of startup.py, as components. Only the server and the model are core."""
+def from_model_checks(results: list[CheckResult], core: bool = True) -> list[Component]:
+    """The Ollama checks of startup.py, as components. Only the server and the model are core (unless Gemini is the main brain)."""
     out = []
     for r in results:
         if r.name == "ollama installed":
             continue                                 # if the server answers, where the binary lives doesn't matter
         label = {"ollama server": "language model server", "model": "language model"}.get(r.name, r.name)
-        out.append(Component(label, OK if r.ok else FAIL, r.detail, r.fix, core=True))
+        out.append(Component(label, OK if r.ok else FAIL, r.detail, r.fix, core=core))
     return out
 
 
@@ -127,8 +127,11 @@ def _voice(voice) -> list[Component]:
     if not s.get("enabled"):
         return [Component("voice", OFF, "turned off in config.yaml (voice.enabled)")]
     stt, tts = s["stt"], s["tts"]
-    out = [Component("speech to text", OK if stt["available"] else WARN,
-                     "ready" if stt["available"] else stt["reason"], "" if stt["available"] else (stt["fix"] + " Typing still works."))]
+    if stt.get("external"):
+        out = [Component("speech to text", OK, "macOS Dictation (STT_ENGINE=macos): click in the text box and press the Dictation key")]
+    else:
+        out = [Component("speech to text", OK if stt["available"] else WARN, "ready" if stt["available"] else stt["reason"],
+                         "" if stt["available"] else (stt["fix"] + " Typing still works."))]
     if tts["available"]:
         names = [e["engine"] for e in tts["engines"] if e["available"]]
         out.append(Component("text to speech", OK, "ready (" + ", ".join(names) + ")"))
@@ -137,9 +140,41 @@ def _voice(voice) -> list[Component]:
     return out
 
 
-def collect(*, model_checks: list[CheckResult], guard, actions=None, voice=None) -> list[Component]:
+def _gemini(brain) -> Component:
+    s = brain.status()
+    g = s["gemini"]
+    only_brain = not s["fallback_enabled"]               # with no local fallback, Gemini failing means the assistant can't think
+    bad = FAIL if only_brain else WARN
+    if g["state"] == "off":
+        return Component("Gemini", OFF, "turned off (USE_GEMINI=false); the local model does everything on this Mac")
+    if g["state"] == "no_key":
+        return Component("Gemini", bad, "turned on, but there is no GEMINI_API_KEY",
+                         "Put your key in .env (see README.md, Gemini setup)." + ("" if only_brain else " Until then the local model is used."), core=only_brain)
+    if g["state"] == "cooling_down":
+        wait = f"retrying in {_human(g['retry_in_seconds'])}"
+        return Component("Gemini", bad, f"{g['reason']}; {wait}" + ("" if only_brain else "; the local model is answering"),
+                         "Check GEMINI_API_KEY / GEMINI_MODEL, your quota and your internet." if g["kind"] in ("auth", "model", "quota") else "",
+                         core=only_brain)
+    return Component("Gemini", OK, f"ready ({g['model']}); the local model takes over if it fails" if s["fallback_enabled"]
+                     else f"ready ({g['model']}); no local fallback", core=only_brain)
+
+
+def _human(seconds: int) -> str:
+    return f"{seconds} s" if seconds < 90 else f"{round(seconds / 60)} min"
+
+
+def collect(*, model_checks: list[CheckResult], guard, actions=None, voice=None, brain=None) -> list[Component]:
     """Everything, core parts first. Parts that aren't present (a test setup with only some services) are left out."""
-    parts = from_model_checks(model_checks) + _safe("safety rules", lambda: _safety(guard))
+    if brain is not None and brain.gemini_wanted:
+        s = brain.status()
+        if not s["fallback_enabled"]:
+            local = [Component(c.name, OFF, "not used (USE_LOCAL_FALLBACK=false)") for c in from_model_checks(model_checks, core=False)]
+        else:
+            local = from_model_checks(model_checks, core=not brain.gemini_usable)    # a usable Gemini means the local model isn't essential
+        parts = local + _safe("Gemini", lambda: [_gemini(brain)])
+    else:
+        parts = from_model_checks(model_checks) + (_safe("Gemini", lambda: [_gemini(brain)]) if brain is not None else [])
+    parts += _safe("safety rules", lambda: _safety(guard))
     if actions is not None:
         desktop = getattr(actions, "desktop", actions if hasattr(actions, "apps") else None)
         for name, part, make in (("apps and files", desktop, _desktop), ("memory", getattr(actions, "memory", None), _memory),

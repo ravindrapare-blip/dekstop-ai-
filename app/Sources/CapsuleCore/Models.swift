@@ -160,6 +160,19 @@ public struct ExecutionResult: Codable, Equatable {
 
 /// The response of POST /route and POST /choose.
 /// `decision` is nil when nothing was judged yet: a question ("which one?") or a "not found".
+/// Which brain chose the action (the cloud model or the local one), and anything the user should hear once about a switch.
+public struct BrainInfo: Codable, Equatable {
+    public let engine: String
+    public let notice: String
+    public let speak: Bool
+
+    public init(engine: String = "", notice: String = "", speak: Bool = false) {
+        self.engine = engine
+        self.notice = notice
+        self.speak = speak
+    }
+}
+
 public struct RouteResponse: Codable, Equatable {
     public let tool: String
     public let args: [String: JSONValue]
@@ -169,9 +182,10 @@ public struct RouteResponse: Codable, Equatable {
     public let attempts: Int
     public let decision: GuardDecision?
     public let result: ExecutionResult?
+    public let brain: BrainInfo?
 
     enum CodingKeys: String, CodingKey {
-        case tool, args, fallback, note, attempts, result
+        case tool, args, fallback, note, attempts, result, brain
         case requiresConfirmation = "requires_confirmation"
         case decision = "guard"
     }
@@ -179,7 +193,7 @@ public struct RouteResponse: Codable, Equatable {
     public init(
         tool: String, args: [String: JSONValue] = [:], requiresConfirmation: Bool = false,
         fallback: Bool = false, note: String = "", attempts: Int = 1,
-        decision: GuardDecision? = nil, result: ExecutionResult? = nil
+        decision: GuardDecision? = nil, result: ExecutionResult? = nil, brain: BrainInfo? = nil
     ) {
         self.tool = tool
         self.args = args
@@ -189,6 +203,7 @@ public struct RouteResponse: Codable, Equatable {
         self.attempts = attempts
         self.decision = decision
         self.result = result
+        self.brain = brain
     }
 }
 

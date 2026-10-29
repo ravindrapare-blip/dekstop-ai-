@@ -37,6 +37,9 @@ class ChatResult:
     eval_count: int = 0
     eval_duration_ns: int = 0
     total_duration_ns: int = 0
+    engine: str = "ollama"        # which brain answered: "ollama" or "gemini"
+    notice: str = ""              # something the user should hear once (for example: "switched to the local model")
+    speak_notice: bool = False
 
     @property
     def tokens_per_second(self) -> float:

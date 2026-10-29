@@ -110,7 +110,11 @@ scripts/start.sh
 
 See `docs/integration.md`.
 
-## 11. Troubleshooting
+## 11. Gemini (optional)
+
+Off by default. To use Google Gemini as the main brain with the local model as the automatic fallback, follow the Gemini section of `README.md` and `docs/brain.md`.
+
+## 12. Troubleshooting
 
 - **`python3: command not found`**: install Python with Homebrew and reopen the terminal.
 - **Port 8765 in use**: change `backend.port` in `config.yaml`.

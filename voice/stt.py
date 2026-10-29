@@ -20,6 +20,21 @@ def clean_transcript(raw: str) -> str:
     return " ".join(_NOISE_TAG.sub(" ", raw).split())
 
 
+class MacDictation:
+    """STT_ENGINE=macos: speech input is done by macOS Dictation, which types into the capsule's text box by itself.
+    The backend therefore transcribes nothing; the mic button explains how to use Dictation instead."""
+
+    name = "macOS Dictation"
+    external = True                      # status shows this as a deliberate choice, not a missing engine
+    HOW = "Click in the text box and press the Dictation key (or Fn twice); macOS types what you say."
+
+    def availability(self) -> Availability:
+        return Availability(False, "Speech input is set to macOS Dictation (STT_ENGINE=macos).", "engine_missing", self.HOW)
+
+    def transcribe(self, wav: bytes) -> str:
+        raise VoiceError("engine_missing", "Speech input is set to macOS Dictation.", self.HOW)
+
+
 class WhisperTranscriber:
     name = "whisper.cpp"
 

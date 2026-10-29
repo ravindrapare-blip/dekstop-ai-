@@ -7,7 +7,7 @@ from pathlib import Path
 
 from voice.audio import MIN_AUDIO_SECONDS, wav_duration
 from voice.base import VoiceError
-from voice.stt import WhisperTranscriber
+from voice.stt import MacDictation, WhisperTranscriber
 from voice.tts import PiperSynthesizer, SaySynthesizer
 
 log = logging.getLogger("assistant.voice")
@@ -46,7 +46,7 @@ class VoiceService:
         engines = [{"engine": s.name, **s.availability().to_dict()} for s in self.synthesizers]
         return {
             "enabled": self.enabled,
-            "stt": {"engine": self.stt.name, **stt.to_dict()},
+            "stt": {"engine": self.stt.name, "external": bool(getattr(self.stt, "external", False)), **stt.to_dict()},
             "tts": {"available": any(e["available"] for e in engines), "engines": engines},
         }
 
@@ -84,12 +84,16 @@ class VoiceService:
 def voice_service_from_config(cfg: dict, root: Path) -> VoiceService:
     v = cfg.get("voice", {})
     w, p = v.get("whisper", {}), v.get("piper", {})
-    synthesizers: list = [PiperSynthesizer(
-        p.get("binary", "piper"), p.get("voice", "data/models/en_US-lessac-low.onnx"), root,
-        timeout=p.get("timeout_seconds", 30),
-    )]
-    if v.get("system_voice_fallback", True):
-        synthesizers.append(SaySynthesizer(timeout=p.get("timeout_seconds", 30)))
+    timeout = p.get("timeout_seconds", 30)
+    piper = PiperSynthesizer(p.get("binary", "piper"), p.get("voice", "data/models/en_US-lessac-low.onnx"), root, timeout=timeout)
+    say = SaySynthesizer(timeout=timeout)
+    if v.get("tts_engine", "piper") == "say":                      # TTS_ENGINE=say: only the Mac's own voice
+        synthesizers: list = [say]
+    else:                                                          # the default: Piper, then the Mac's voice if Piper isn't set up
+        synthesizers = [piper] + ([say] if v.get("system_voice_fallback", True) else [])
+    if v.get("stt_engine", "whisper") == "macos":                  # STT_ENGINE=macos: macOS Dictation types into the text box
+        return VoiceService(MacDictation(), synthesizers, enabled=v.get("enabled", True),
+                            max_text_chars=v.get("max_text_chars", DEFAULT_MAX_TEXT_CHARS))
     stt = WhisperTranscriber(
         w.get("binary", "reference/whisper.cpp/build/bin/whisper-cli"),
         w.get("model", "reference/whisper.cpp/models/ggml-tiny.en.bin"),

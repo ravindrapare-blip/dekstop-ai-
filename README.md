@@ -2,7 +2,7 @@
 
 A lightweight, local-first desktop assistant for a **2017 MacBook Air running macOS Monterey**.
 
-- Local LLM through **Ollama**. No cloud APIs for core logic.
+- Local LLM through **Ollama** by default. Optionally **Google Gemini** as the main brain, with automatic fallback to the local model (`docs/brain.md`). Off unless you turn it on.
 - Speech in with **whisper.cpp**, speech out with **Piper**.
 - Chrome automation with **Puppeteer**, macOS automation with **Hammerspoon**.
 - Floating UI in **SwiftUI**. No Electron.
@@ -40,6 +40,30 @@ A lightweight, local-first desktop assistant for a **2017 MacBook Air running ma
 curl http://127.0.0.1:8765/health
 ./scripts/stop.sh
 ```
+
+## Setup: local only, or Gemini with a local fallback
+
+**Local only (the default).** Nothing leaves your Mac.
+
+```bash
+./scripts/install.sh
+ollama pull qwen2.5:3b          # the local model (see docs/install.md for Ollama on macOS 12)
+./scripts/start.sh
+.venv/bin/python scripts/status.py
+```
+
+**Gemini first, local model as the safety net.** Do the steps above first (so the fallback is ready), then:
+
+```bash
+cp .env.example .env && chmod 600 .env      # .env is ignored by git
+# edit .env:  USE_GEMINI=true   GEMINI_API_KEY=your-key   GEMINI_MODEL=<a current Gemini model name>
+./scripts/stop.sh && ./scripts/start.sh
+.venv/bin/python scripts/validate_all.py --only gemini
+```
+
+If Gemini hits its quota, can't be reached, is too slow or rejects the key, the assistant switches to the local model by itself, tells you once, and tries Gemini again after a cooldown. When Gemini is on, the text of your requests goes to Google; voice recordings, notes, reminders, files and web pages never do. Full details, every setting and the privacy table: `docs/brain.md`.
+
+Other switches (environment variables or `.env`): `USE_LOCAL_FALLBACK`, `LOCAL_MODEL_NAME`, `SAFE_MODE` (every browser action asks first), `STT_ENGINE` (`whisper` or `macos` Dictation), `TTS_ENGINE` (`piper` or `say`).
 
 ## Documents
 

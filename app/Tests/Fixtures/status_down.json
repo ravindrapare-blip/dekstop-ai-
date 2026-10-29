@@ -15,6 +15,13 @@
       "state": "fail"
     },
     {
+      "core": false,
+      "detail": "turned off (USE_GEMINI=false); the local model does everything on this Mac",
+      "fix": "",
+      "name": "Gemini",
+      "state": "off"
+    },
+    {
       "core": true,
       "detail": "38 tools have rules; everything else is refused",
       "fix": "",

@@ -3,6 +3,11 @@
     "path_or_name": "/Users/me/Documents/report.pdf"
   },
   "attempts": 0,
+  "brain": {
+    "engine": "",
+    "notice": "",
+    "speak": false
+  },
   "fallback": false,
   "guard": {
     "args": {

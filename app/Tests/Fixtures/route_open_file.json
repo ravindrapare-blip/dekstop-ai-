@@ -3,6 +3,11 @@
     "path_or_name": "budget.pdf"
   },
   "attempts": 1,
+  "brain": {
+    "engine": "ollama",
+    "notice": "",
+    "speak": false
+  },
   "fallback": false,
   "guard": {
     "args": {

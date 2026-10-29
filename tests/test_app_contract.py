@@ -14,6 +14,8 @@ from backend.config import ROOT
 from backend.llm import OllamaClient
 from backend.main import create_app
 from automation.choices import ChoiceStore
+from backend.brain import Brain
+from backend.gemini import GeminiClient
 from backend.actions import ActionRouter
 from browserctl import BrowserService
 from fake_browser import FakeWorker, cand
@@ -71,7 +73,7 @@ class Scene:
         self.world.service.choices = choices
         return ActionRouter(self.world.service, BrowserService(FakeWorker(), choices=choices), choices, None, service)
 
-    def client(self, model_output, ollama_down=False, voice=None, actions=None):
+    def client(self, model_output, ollama_down=False, voice=None, actions=None, gemini=None):
         def handler(request: httpx.Request) -> httpx.Response:
             if ollama_down:
                 raise httpx.ConnectError("refused", request=request)
@@ -81,7 +83,11 @@ class Scene:
 
         llm = OllamaClient("http://127.0.0.1:11434", "m", transport=httpx.MockTransport(handler))
         cfg = {"ollama": {}, "router": {"max_retries": 0}}
-        return TestClient(create_app(cfg, llm, guard=GuardrailManager(POLICY), voice=voice, actions=actions or self.world.service))
+        brain = None
+        if gemini is not None:                       # (handler, clock): Gemini first, this local model as the fallback
+            transport, clock = gemini
+            brain = Brain(llm, GeminiClient("k" * 30, "gemini-test", transport=httpx.MockTransport(transport)), gemini_wanted=True, clock=clock)
+        return TestClient(create_app(cfg, llm, guard=GuardrailManager(POLICY), voice=voice, actions=actions or self.world.service, brain=brain))
 
     def clean(self, body):
         """Random ids and temporary folders are replaced by fixed values, so fixtures are stable."""
@@ -186,6 +192,20 @@ def scenarios(tmp_path):
     with scene.client(tool_json("list_tasks"), actions=router) as c:
         out["route_list_tasks"] = c.post("/route", json={"text": "what are my tasks"}).json()
 
+    # the cloud model first, the local one when Gemini fails, and back to Gemini after the cooldown
+    gemini_up = {"ok": False}
+    clock = [0.0]
+
+    def fake_gemini(request: httpx.Request) -> httpx.Response:
+        if not gemini_up["ok"]:
+            return httpx.Response(429, json={"error": {"code": 429, "status": "RESOURCE_EXHAUSTED", "message": "quota"}})
+        return httpx.Response(200, json={"candidates": [{"content": {"parts": [{"text": tool_json("reply", text="Hi from Gemini.")}]}}]})
+
+    with scene.client(tool_json("reply", text="Hi from the local model."), gemini=(fake_gemini, lambda: clock[0])) as c:
+        out["route_gemini_fallback"] = c.post("/route", json={"text": "hello"}).json()
+        gemini_up["ok"], clock[0] = True, 400.0
+        out["route_gemini_back"] = c.post("/route", json={"text": "hello"}).json()
+
     # organizing: the preview comes first, the move only after the user confirms
     sorter = Scene(tmp_path / "sort")
     with sorter.client(json.dumps({"tool": "organize_desktop", "args": {}, "requires_confirmation": True}),
@@ -239,7 +259,7 @@ def test_fixtures_match_the_backend(tmp_path):
 
 def test_the_fields_the_app_decodes_are_present(tmp_path):
     """Mirrors the Codable models in app/Sources/CapsuleCore/Models.swift."""
-    envelope_keys = {"tool", "args", "requires_confirmation", "fallback", "note", "attempts", "guard", "result"}
+    envelope_keys = {"tool", "args", "requires_confirmation", "fallback", "note", "attempts", "guard", "result", "brain"}
     guard_keys = {"outcome", "authorized", "risk", "reason", "message", "tool", "args",
                   "confirmation_id", "requires_acknowledgment"}
     result_keys = {"status", "message", "items", "choice", "via"}
@@ -262,6 +282,7 @@ def test_the_fields_the_app_decodes_are_present(tmp_path):
             continue
         if name.startswith("route_") or name.startswith("choose_"):
             assert set(body) == envelope_keys, name
+            assert set(body["brain"]) == {"engine", "notice", "speak"} and body["brain"]["engine"] in ("", "ollama", "gemini"), name
             decision, result = body["guard"], body["result"]
         else:    # /confirm answers with the decision plus the result
             assert set(body) == guard_keys | {"result"}, name

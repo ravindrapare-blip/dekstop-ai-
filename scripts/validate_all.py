@@ -5,7 +5,7 @@ Usage: .venv/bin/python scripts/validate_all.py [options]
   --notify       also send one real macOS notification
   --live         also open a folder in Finder (to prove the app tool really acts)
   --headless     run Chrome without a window for the browser check
-  --only a,b     run only some checks: model, browser, ui, voice, reminders, safety, files, backend
+  --only a,b     run only some checks: model, gemini, browser, ui, voice, reminders, safety, files, backend
   --list         list the checks and exit
 
 Reminders and files are tried in a temporary folder, never your real data. The browser check opens Chrome (the
@@ -24,7 +24,7 @@ sys.path.insert(0, str(ROOT))
 from backend import validate as v  # noqa: E402
 from backend.config import load_config  # noqa: E402
 
-NAMES = ["model", "browser", "ui", "voice", "reminders", "safety", "files", "backend"]
+NAMES = ["model", "gemini", "browser", "ui", "voice", "reminders", "safety", "files", "backend"]
 
 
 def fetch(url: str):
@@ -63,6 +63,18 @@ def main() -> int:
             llm = client_from_config(cfg)
             cleanup.append(llm.close)
             run("model", v.check_model, llm, deep="--deep" in args)
+        if "gemini" in only:
+            from backend.brain import build_brain
+            from backend.llm import client_from_config
+            from backend.settings import apply_to_config, load_settings
+            settings = load_settings(cfg)
+            effective = apply_to_config(cfg, settings)
+            local = client_from_config(effective)
+            brain = build_brain(effective, settings, local)
+            cleanup += [brain.close, local.close]
+            for warning in settings.warnings:
+                print(f"[warn] {warning}")
+            run("gemini", v.check_gemini, brain)
         if "browser" in only:
             from automation.token import ensure_token
             from browserctl.factory import build_browser

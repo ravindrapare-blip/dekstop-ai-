@@ -208,7 +208,12 @@ public final class CapsuleController {
         do {
             let response = try await client.route(text: text)
             guard id == requestID else { return }
-            perform(plan(response))
+            var step = plan(response)
+            if let brain = response.brain, !brain.notice.isEmpty {
+                step = adding(notice: brain.notice, to: step)      // for example: "Gemini's quota was reached, so I switched to the local model."
+                if brain.speak { lastRequestWasSpoken = true }     // the user asked to hear switches; "never speak" still wins
+            }
+            perform(step)
         } catch is CancellationError {
             // cancel() already updated the state
         } catch {

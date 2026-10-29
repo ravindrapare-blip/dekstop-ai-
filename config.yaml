@@ -17,11 +17,26 @@ ollama:
   max_loaded_models: 1
   num_parallel: 1
 
+brain:
+  # Gemini (cloud) as the main brain, the local Ollama model as the automatic fallback. OFF by default: the assistant is
+  # fully local unless you turn this on. The API key never goes in this file: put it in .env (copy .env.example).
+  # Environment variables / .env override these: USE_GEMINI, USE_LOCAL_FALLBACK, GEMINI_MODEL, SAFE_MODE.
+  use_gemini: false
+  use_local_fallback: true     # switch to the local model automatically when Gemini fails, and back when it recovers
+  gemini_model: gemini-2.0-flash   # check Google's current model names; GEMINI_MODEL overrides this
+  timeout_seconds: 10          # how long to wait for Gemini before using the local model
+  cooldown_seconds: 300        # after quota/network/timeout trouble, stay on the local model this long, then try Gemini again
+  auth_cooldown_seconds: 1800  # after a rejected key or unknown model (waiting a minute won't fix those)
+  send_memory_to_gemini: false # your saved preferences stay on this Mac unless you set this to true
+  speak_switch_notice: false   # read "I switched to the local model" aloud too (needs voice output)
+
 router:
   max_retries: 1         # one corrective retry when the model returns invalid JSON
 
 voice:
   enabled: true
+  stt_engine: whisper    # whisper (whisper.cpp, local) or macos (use macOS Dictation in the text box); STT_ENGINE overrides
+  tts_engine: piper      # piper (local, default) or say (the Mac's voice); TTS_ENGINE overrides; google is not built yet
   max_text_chars: 500    # longest reply that is spoken; longer ones are shortened
   system_voice_fallback: true   # macOS "say" voice when Piper is not installed
   # Paths are relative to the project root. See docs/voice.md for setup.
@@ -80,6 +95,7 @@ safety:
   approval_timeout_seconds: 60       # no answer means the request expires (nothing runs)
   max_pending: 5                     # unanswered confirmations kept at once (oldest dropped)
   dry_run: false                     # true: describe every action, run none
+  safe_mode: false                   # true (or SAFE_MODE=true): every browser action asks you first
 
 memory:
   enabled: true

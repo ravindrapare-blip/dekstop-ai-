@@ -10,14 +10,17 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from backend.config import ROOT, load_config
+from backend.brain import Brain, build_brain
 from backend.llm import ModelNotFound, OllamaClient, OllamaError, OllamaUnavailable, client_from_config
 from automation.token import ensure_token
 from backend.actions import ActionRouter, build_router
 from backend.pipeline import Outcome, Pipeline
 from backend.router import MAX_INPUT_CHARS, Router
+from backend.settings import Settings, apply_to_config, load_settings
 from backend.startup import run_checks
 from backend.status import collect, overall
 from backend.tool_defs import build_registry
+from backend.tools import Category
 from safety import AuditLog, GuardrailManager, Policy
 from safety.policy import PolicyError
 from voice import VoiceError, VoiceService, voice_service_from_config
@@ -68,12 +71,15 @@ def check_host(host: str) -> str:
 def build_guard(cfg: dict) -> GuardrailManager:
     s = cfg.get("safety", {})
     policy = Policy.load(ROOT / s.get("policy_file", "safety/policy.yaml"))
+    # SAFE_MODE: every browser action asks first (they are low risk otherwise). Only ever raises the level.
+    safe_tools = frozenset(t.name for t in build_registry().by_category(Category.BROWSER)) if s.get("safe_mode") else frozenset()
     return GuardrailManager(
         policy,
         AuditLog(ROOT / s.get("audit_file", "data/logs/audit.jsonl")),
         timeout_seconds=s.get("approval_timeout_seconds", 60),
         max_pending=s.get("max_pending", 5),
         dry_run=s.get("dry_run", False),
+        safe_mode_tools=safe_tools,
     )
 
 
@@ -90,9 +96,16 @@ def create_app(
     guard: GuardrailManager | None = None,
     voice: VoiceService | None = None,
     actions: ActionRouter | None = None,     # anything with prepare/execute/choose/status
+    brain: Brain | None = None,              # chooses Gemini or the local model; built from the settings if not given
+    settings: Settings | None = None,
 ) -> FastAPI:
     cfg = cfg or load_config()
+    settings = settings or load_settings(cfg)
+    for warning in settings.warnings:
+        log.warning("settings: %s", warning)
+    cfg = apply_to_config(cfg, settings)                 # environment variables win over config.yaml
     llm = llm or client_from_config(cfg)
+    brain = brain or build_brain(cfg, settings, llm)
     guard = guard or build_guard(cfg)
     voice = voice or voice_service_from_config(cfg, ROOT)
     actions = actions or build_router(cfg, ROOT)
@@ -102,7 +115,7 @@ def create_app(
     unruled = sorted(t.name for t in registry.all() if t.name not in guard.policy.rules)
     if unruled:
         log.warning("tools with no safety rule can never run: %s", ", ".join(unruled))
-    router = Router(llm, registry, max_retries=cfg.get("router", {}).get("max_retries", 1),
+    router = Router(brain, registry, max_retries=cfg.get("router", {}).get("max_retries", 1),
                     context=getattr(actions, "memory_context", None))
     record_command = getattr(actions, "record_command", None)
 
@@ -122,7 +135,7 @@ def create_app(
         if start is not None:
             start()                  # reminders start watching the clock
         try:
-            for c in collect(model_checks=run_checks(llm), guard=guard, actions=actions, voice=voice):
+            for c in collect(model_checks=run_checks(llm), guard=guard, actions=actions, voice=voice, brain=brain):
                 (log.info if c.state in ("ok", "off") else log.warning)("status %s: %s (%s) %s", c.name, c.state, c.detail, c.fix)
         except Exception:
             log.exception("could not summarize the startup status")
@@ -130,7 +143,7 @@ def create_app(
         # Shutting down: uvicorn has stopped taking requests. Stop the helpers; one failing must not leave the others running.
         log.info("shutting down")
         close = getattr(actions, "close", None)
-        for name, stop in (("actions", close), ("language model client", llm.close)):
+        for name, stop in (("actions", close), ("Gemini client", brain.close), ("language model client", llm.close)):
             if stop is None:
                 continue
             try:
@@ -152,16 +165,17 @@ def create_app(
     @app.get("/status")
     def status() -> dict:
         results = run_checks(llm)
-        components = collect(model_checks=results, guard=guard, actions=actions, voice=voice)
+        components = collect(model_checks=results, guard=guard, actions=actions, voice=voice, brain=brain)
         state = overall(components)
         return {"ready": state != "down", "state": state, "model": llm.model, "checks": [r.to_dict() for r in results],
-                "components": [c.to_dict() for c in components]}
+                "components": [c.to_dict() for c in components], "brain": brain.status()}
 
     @app.get("/tools")
     def tools() -> list[dict]:
         return [t.to_dict() for t in registry.all()]
 
-    def envelope(outcome: Outcome, *, fallback: bool = False, note: str = "", attempts: int = 0, shown_args=None) -> dict:
+    def envelope(outcome: Outcome, *, fallback: bool = False, note: str = "", attempts: int = 0, shown_args=None,
+                 engine: str = "", notice: str = "", speak_notice: bool = False) -> dict:
         """The answer shape the app understands: the call, the safety decision (if one was made) and the result."""
         return {
             "tool": outcome.tool,
@@ -170,6 +184,7 @@ def create_app(
             "fallback": fallback,
             "note": note,
             "attempts": attempts,
+            "brain": {"engine": engine, "notice": notice, "speak": speak_notice},      # which model chose, and anything to tell the user once
             "guard": outcome.decision.to_dict() if outcome.decision else None,
             "result": outcome.result.to_dict() if outcome.result else None,
         }
@@ -190,7 +205,8 @@ def create_app(
             record_command(req.text, call.tool, (outcome.result.status if outcome.result
                                                   else outcome.decision.outcome.value if outcome.decision else "question"))
         return envelope(
-            outcome, fallback=routed.fallback, note=routed.note, attempts=routed.attempts,
+            outcome, fallback=routed.fallback, note=routed.note, attempts=routed.attempts, engine=routed.engine,
+            notice=routed.notice, speak_notice=routed.speak_notice,
             shown_args=call.args,    # what the model proposed; the judged (resolved) call is in "guard"
         )
 
@@ -262,7 +278,7 @@ def main() -> None:
     try:
         cfg = load_config()
         host = check_host(cfg["backend"]["host"])
-        application = create_app(cfg)
+        application = create_app(cfg, settings=load_settings(cfg))
     except SystemExit:
         raise
     except Exception as e:

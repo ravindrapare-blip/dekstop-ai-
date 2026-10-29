@@ -4,6 +4,11 @@ __pycache__/
 node_modules/
 .DS_Store
 
+# secrets: the Gemini key lives here (copy .env.example)
+.env
+.env.*
+!.env.example
+
 # runtime data (the memory database, logs, the Chrome profile); the schema is memory/schema.sql
 data/*
 !data/.gitkeep

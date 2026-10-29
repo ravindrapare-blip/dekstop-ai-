@@ -16,6 +16,7 @@ from datetime import datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+from backend.gemini import GeminiError
 from backend.router import Router
 from backend.startup import run_checks
 from backend.tool_defs import build_registry
@@ -63,6 +64,33 @@ def check_model(llm, *, deep: bool = False) -> Result:
         speed = f", {routed.stats.tokens_per_second:.1f} tokens/s" if routed.stats else ""
         detail += f"; chose open_app for “open chrome”{speed}"
     return Result("model", OK, detail)
+
+
+GEMINI_FIX = {
+    "quota": "Wait for the quota to reset or check your plan; the local model answers meanwhile.",
+    "auth": "Check GEMINI_API_KEY in .env (and that the Gemini API is enabled for it).",
+    "model": "Check GEMINI_MODEL: that name isn't available to your key.",
+    "timeout": "Check your internet connection; the local model answers meanwhile.",
+    "network": "Check your internet connection; the local model answers meanwhile.",
+    "server": "Gemini is having trouble; try again later. The local model answers meanwhile.",
+}
+
+
+def check_gemini(brain) -> Result:
+    """One tiny real request to Gemini. It talks to the client directly, so it doesn't change the assistant's fallback state."""
+    if not brain.gemini_wanted:
+        return Result("gemini", SKIP, "Gemini is turned off (USE_GEMINI=false); the local model does everything")
+    if brain.gemini is None:
+        return Result("gemini", FAIL, "USE_GEMINI is on but there is no GEMINI_API_KEY", "Copy .env.example to .env and add your key (README.md, Gemini setup).")
+    started = time.monotonic()
+    try:
+        brain.gemini.chat([{"role": "system", "content": "Reply with JSON only."}, {"role": "user", "content": 'Reply with {"ok": true}'}])
+    except GeminiError as e:
+        fallback = "" if brain.use_local_fallback else " (and USE_LOCAL_FALLBACK is off, so the assistant can't think)"
+        return Result("gemini", FAIL, e.why + fallback, GEMINI_FIX.get(e.kind, ""))
+    detail = f"{brain.gemini.model} answered in {time.monotonic() - started:.1f}s"
+    detail += "; the local model is the fallback" if brain.use_local_fallback else "; there is NO local fallback (USE_LOCAL_FALLBACK=false)"
+    return Result("gemini", OK, detail)
 
 
 # ---- 2. browser automation ------------------------------------------------------------------------------------
@@ -166,6 +194,14 @@ def check_voice(voice, *, run=subprocess.run, platform: str = sys.platform) -> R
     if not status["enabled"]:
         return Result("voice", SKIP, "voice is turned off (voice.enabled in config.yaml)")
     stt, tts = status["stt"], status["tts"]
+    if stt.get("external"):                      # STT_ENGINE=macos: the Mac's Dictation types into the text box; only the voice-out can be tested
+        if not tts["available"]:
+            return Result("voice", FAIL, "no text to speech engine works", "See docs/voice.md.")
+        try:
+            voice.speak("Testing one two three.")
+        except Exception as e:
+            return Result("voice", FAIL, f"text to speech failed: {getattr(e, 'detail', None) or e}")
+        return Result("voice", OK, "text to speech works; speech input is macOS Dictation (try it by hand: click in the text box, press Fn twice)")
     if not stt["available"]:
         return Result("voice", FAIL, f"speech to text: {stt['reason']}", stt["fix"])
     if not tts["available"]:

@@ -1,6 +1,11 @@
 {
   "args": {},
   "attempts": 1,
+  "brain": {
+    "engine": "ollama",
+    "notice": "",
+    "speak": false
+  },
   "fallback": false,
   "guard": {
     "args": {},

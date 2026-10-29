@@ -34,6 +34,23 @@ final class ControllerTests: XCTestCase {
 
     // MARK: - typed requests
 
+    func testASwitchToTheLocalModelIsAnnouncedWithTheAnswer() async throws {
+        let c = try make(.serving(["/route": "route_gemini_fallback"]))
+        XCTAssertTrue(c.submit("hello"))
+        await settle(c)
+        XCTAssertEqual(c.state.phase, .done)
+        XCTAssertTrue(c.state.message.hasPrefix("Hi from the local model."))
+        XCTAssertTrue(c.state.message.contains("switched to the local model"))
+    }
+
+    func testSwitchingBackToGeminiIsAnnouncedToo() async throws {
+        let c = try make(.serving(["/route": "route_gemini_back"]))
+        XCTAssertTrue(c.submit("hello"))
+        await settle(c)
+        XCTAssertTrue(c.state.message.hasPrefix("Hi from Gemini."))
+        XCTAssertTrue(c.state.message.hasSuffix("Gemini is available again, so I'm using it."))
+    }
+
     func testReplyIsShown() async throws {
         let c = try make(.serving(["/route": "route_reply"]))
         XCTAssertTrue(c.submit("hi"))

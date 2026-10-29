@@ -93,6 +93,7 @@ class GuardrailManager:
         timeout_seconds: float = 60,
         max_pending: int = 5,
         dry_run: bool = False,
+        safe_mode_tools: frozenset = frozenset(),
         clock=time.monotonic,
     ) -> None:
         self.policy = policy
@@ -100,6 +101,7 @@ class GuardrailManager:
         self.timeout = timeout_seconds
         self.max_pending = max(1, max_pending)
         self.dry_run = dry_run
+        self.safe_mode_tools = frozenset(safe_mode_tools)      # SAFE_MODE: these always ask first
         self._clock = clock
         self._pending: dict[str, _Pending] = {}
         self._lock = threading.Lock()
@@ -116,6 +118,8 @@ class GuardrailManager:
         finding = check_args(call.tool, call.args, self.policy)
         if finding and finding.risk > base:
             return _Assessment(finding.risk, finding.reason)
+        if base is Risk.LOW and call.tool in self.safe_mode_tools:
+            return _Assessment(Risk.MEDIUM, "safe mode asks before this action")
         if base is Risk.LOW and call.requires_confirmation:
             return _Assessment(Risk.MEDIUM, "this action asks for confirmation")
         return _Assessment(base, f"{call.tool} is a {base.label}-risk action")

@@ -61,7 +61,7 @@ What each part needs:
 
 | Part | Needs | If missing |
 |---|---|---|
-| Language model | Ollama running, the model in `ollama.model` pulled | down |
+| Language model | Ollama running, the model in `ollama.model` pulled (or Gemini working: see `docs/brain.md`) | down |
 | Safety rules | `safety/policy.yaml` | down |
 | Apps and files | macOS and the standard folders | feature fails |
 | Hammerspoon | optional | AppleScript / `open` are used |

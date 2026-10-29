@@ -22,6 +22,9 @@ class RouteResult:
     attempts: int = 0            # model calls made
     note: str = ""
     stats: ChatResult | None = None
+    engine: str = "ollama"       # which brain chose the tool ("gemini" or "ollama")
+    notice: str = ""             # something to tell the user once, such as "switched to the local model"
+    speak_notice: bool = False
 
 
 def _reply(text: str, note: str, attempts: int = 0) -> RouteResult:
@@ -29,7 +32,7 @@ def _reply(text: str, note: str, attempts: int = 0) -> RouteResult:
 
 
 class Router:
-    def __init__(self, llm: OllamaClient, registry: ToolRegistry, max_retries: int = 1, clock=datetime.now,
+    def __init__(self, llm, registry: ToolRegistry, max_retries: int = 1, clock=datetime.now,
                  context=None):
         self.llm = llm
         self.registry = registry
@@ -54,8 +57,12 @@ class Router:
 
         messages = build_messages(self.registry, text, self.clock(), self._known_about_user())
         reason = ""
+        engine, notice, speak = "ollama", "", False
         for attempt in range(1, self.max_retries + 2):
             result = self.llm.chat(messages)
+            engine = result.engine
+            if result.notice and not notice:            # a switch between brains is announced once, whichever attempt saw it
+                notice, speak = result.notice, result.speak_notice
             try:
                 call = parse_tool_call(result.content, self.registry)
             except ToolCallError as e:
@@ -67,11 +74,13 @@ class Router:
                 ]
                 continue
             log.info("routed to %s (attempt %d, confirm=%s)", call.tool, attempt, call.requires_confirmation)
-            return RouteResult(call, attempts=attempt, stats=result)
+            return RouteResult(call, attempts=attempt, stats=result, engine=engine, notice=notice, speak_notice=speak)
 
         log.warning("falling back to reply after %d attempts: %s", self.max_retries + 1, reason)
-        return _reply(
+        out = _reply(
             "I didn't understand that well enough to act. Could you rephrase it?",
             f"invalid model output: {reason}",
             attempts=self.max_retries + 1,
         )
+        out.engine, out.notice, out.speak_notice = engine, notice, speak
+        return out

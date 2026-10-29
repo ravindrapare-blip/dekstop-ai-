@@ -1,0 +1,29 @@
+{
+  "args": {
+    "text": "Hi from Gemini."
+  },
+  "attempts": 1,
+  "brain": {
+    "engine": "gemini",
+    "notice": "Gemini is available again, so I'm using it.",
+    "speak": false
+  },
+  "fallback": false,
+  "guard": {
+    "args": {
+      "text": "Hi from Gemini."
+    },
+    "authorized": true,
+    "confirmation_id": null,
+    "message": "",
+    "outcome": "allow",
+    "reason": "reply is a low-risk action",
+    "requires_acknowledgment": false,
+    "risk": "low",
+    "tool": "reply"
+  },
+  "note": "",
+  "requires_confirmation": false,
+  "result": null,
+  "tool": "reply"
+}

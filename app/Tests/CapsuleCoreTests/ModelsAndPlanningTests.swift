@@ -6,7 +6,7 @@ final class ModelsAndPlanningTests: XCTestCase {
         "route_allow_open_app", "route_reply", "route_confirm_close_app", "route_confirm_high_risk", "route_block_url",
         "route_dry_run", "route_fallback", "route_not_found", "route_not_available", "route_search",
         "route_open_file", "route_choose_file", "choose_done", "choose_expired",
-        "route_browser_search", "route_needs_login", "route_browser_confirm_click", "route_create_reminder", "route_list_tasks", "route_organize_preview",
+        "route_browser_search", "route_needs_login", "route_browser_confirm_click", "route_create_reminder", "route_list_tasks", "route_organize_preview", "route_gemini_fallback", "route_gemini_back",
     ]
 
     func testEveryBackendFixtureDecodes() throws {
@@ -158,7 +158,7 @@ final class ModelsAndPlanningTests: XCTestCase {
         let degraded: SystemStatus = try Fixtures.decode("status_degraded")
         XCTAssertTrue(degraded.ready)
         XCTAssertEqual(degraded.state, "degraded")
-        XCTAssertEqual(degraded.components.count, 8)
+        XCTAssertEqual(degraded.components.count, 9)
         XCTAssertEqual(summarize(degraded), StatusSummary(tone: .warning, text: "Ready. Needs attention: Hammerspoon"))
         let down: SystemStatus = try Fixtures.decode("status_down")
         XCTAssertFalse(down.ready)
@@ -185,6 +185,36 @@ final class ModelsAndPlanningTests: XCTestCase {
         XCTAssertEqual(line(for: ComponentStatus(name: "model", state: "fail", detail: "missing")), "✕ model: missing")
         XCTAssertEqual(line(for: ComponentStatus(name: "voice", state: "off", detail: "turned off")), "– voice: turned off")
         XCTAssertTrue(line(for: ComponentStatus(name: "x", state: "ok", detail: String(repeating: "a", count: 200))).hasSuffix("…"))
+    }
+
+    func testTheResponseSaysWhichBrainAnswered() throws {
+        XCTAssertEqual(try Fixtures.route("route_reply").brain, BrainInfo(engine: "ollama", notice: "", speak: false))
+        let local = try Fixtures.route("route_gemini_fallback")
+        XCTAssertEqual(local.brain?.engine, "ollama")
+        XCTAssertTrue(local.brain?.notice.hasSuffix("I'll try Gemini again in 5 minutes.") ?? false)
+        XCTAssertEqual(try Fixtures.route("route_gemini_back").brain?.engine, "gemini")
+    }
+
+    func testANoticeJoinsEveryKindOfStepWithoutChangingIt() {
+        let note = "Gemini is out of quota, so I switched to the local model."
+        XCTAssertEqual(adding(notice: note, to: .reply("Hi.")), .reply("Hi.\n\n\(note)"))
+        XCTAssertEqual(adding(notice: note, to: .report(message: "Done.", tone: .success, lastAction: "x")),
+                       .report(message: "Done.\n\n\(note)", tone: .success, lastAction: "x"))
+        XCTAssertEqual(adding(notice: note, to: .refuse("No.")), .refuse("No.\n\n\(note)"))
+        XCTAssertEqual(adding(notice: note, to: .preview("Dry.")), .preview("Dry.\n\n\(note)"))
+        let pending = PendingConfirmation(id: "1", message: "Sure?", requiresAcknowledgment: true, actionLabel: "close app")
+        guard case .ask(let asked) = adding(notice: note, to: .ask(pending)) else { return XCTFail("still a question") }
+        XCTAssertEqual(asked.message, "Sure?\n\n\(note)")
+        XCTAssertEqual(asked.id, "1")
+        XCTAssertTrue(asked.requiresAcknowledgment)             // the safety question itself is untouched
+        let choice = ChoicePrompt(choiceId: "c", prompt: "Which?", options: [ChoiceOption(id: "1", label: "a")])
+        guard case .choose(let chosen) = adding(notice: note, to: .choose(choice)) else { return XCTFail("still a choice") }
+        XCTAssertEqual(chosen.prompt, "Which?\n\n\(note)")
+        XCTAssertEqual(chosen.options, choice.options)
+        XCTAssertEqual(adding(notice: note, to: .invalid("x")), .invalid("x"))
+        XCTAssertEqual(adding(notice: "  \n ", to: .reply("Hi.")), .reply("Hi."))
+        XCTAssertEqual(adding(notice: "", to: .reply("Hi.")), .reply("Hi."))
+        XCTAssertEqual(adding(notice: note, to: .reply("")), .reply(note))
     }
 
     func testPrivateTextIsNotShownInAnActionLabel() {

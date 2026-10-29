@@ -347,7 +347,7 @@ def test_main_starts_the_server_with_a_graceful_shutdown(monkeypatch, sys_):
     import backend.main as main_module
     seen = {}
     monkeypatch.setattr(main_module, "load_config", lambda: {"backend": {"host": "127.0.0.1", "port": 8765}})
-    monkeypatch.setattr(main_module, "create_app", lambda cfg: sys_.app)
+    monkeypatch.setattr(main_module, "create_app", lambda cfg, settings=None: sys_.app)
     monkeypatch.setattr(main_module.uvicorn, "run", lambda app, **kw: seen.update(app=app, **kw))
     main_module.main()
     assert seen["app"] is sys_.app and seen["host"] == "127.0.0.1" and seen["port"] == 8765 and seen["timeout_graceful_shutdown"] == 5

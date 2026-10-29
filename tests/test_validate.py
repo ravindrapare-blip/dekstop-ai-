@@ -344,7 +344,7 @@ def run_script(*args):
 
 def test_the_script_lists_its_checks_and_rejects_unknown_ones():
     listed = run_script("--list")
-    assert listed.returncode == 0 and listed.stdout.split() == ["model", "browser", "ui", "voice", "reminders", "safety", "files", "backend"]
+    assert listed.returncode == 0 and listed.stdout.split() == ["model", "gemini", "browser", "ui", "voice", "reminders", "safety", "files", "backend"]
     bad = run_script("--only", "nonsense")
     assert bad.returncode == 2 and "Unknown check" in bad.stdout
 
@@ -450,3 +450,60 @@ def test_the_browser_check_notices_a_wrong_title_even_if_the_rest_works():
             return {"title": "Something else"} if type(self).reads == 1 else super().do_get_title()
     r = v.check_browser(BrowserService(FirstTitleWrong()))
     assert r.status == v.FAIL and "wrong title" in r.detail
+
+
+# ---- the Gemini check --------------------------------------------------------------------------------------------
+
+def _brain(*, wanted=True, with_key=True, fallback=True, reply=None, status=200):
+    from backend.brain import Brain
+    from backend.gemini import GeminiClient
+    def server(request):
+        return httpx.Response(status, json=reply if reply is not None else {"candidates": [{"content": {"parts": [{"text": '{"ok": true}'}]}}]})
+    gemini = GeminiClient("k" * 30, "gemini-test", transport=httpx.MockTransport(server)) if with_key else None
+    return Brain(None, gemini, gemini_wanted=wanted, use_local_fallback=fallback)
+
+
+def test_the_gemini_check_is_skipped_when_gemini_is_off():
+    r = v.check_gemini(_brain(wanted=False, with_key=False))
+    assert r.status == v.SKIP and "USE_GEMINI=false" in r.detail
+
+
+def test_the_gemini_check_says_when_the_key_is_missing():
+    r = v.check_gemini(_brain(with_key=False))
+    assert r.status == v.FAIL and "no GEMINI_API_KEY" in r.detail and ".env" in r.fix
+
+
+def test_the_gemini_check_passes_with_a_working_key_and_names_the_fallback():
+    r = v.check_gemini(_brain())
+    assert r.status == v.OK and "gemini-test answered" in r.detail and "local model is the fallback" in r.detail
+    assert "NO local fallback" in v.check_gemini(_brain(fallback=False)).detail
+
+
+@pytest.mark.parametrize("status,body,phrase", [(429, {"error": {"status": "RESOURCE_EXHAUSTED"}}, "quota"), (403, {"error": {"status": "PERMISSION_DENIED"}}, "GEMINI_API_KEY"),
+                                                (404, {"error": {"status": "NOT_FOUND"}}, "GEMINI_MODEL"), (503, {"error": {"status": "UNAVAILABLE"}}, "trouble")])
+def test_the_gemini_check_explains_each_failure_and_what_to_do(status, body, phrase):
+    r = v.check_gemini(_brain(reply=body, status=status))
+    assert r.status == v.FAIL and phrase in (r.detail + r.fix)
+
+
+def test_the_gemini_check_warns_when_failure_means_no_answers_at_all():
+    r = v.check_gemini(_brain(reply={"error": {"status": "RESOURCE_EXHAUSTED"}}, status=429, fallback=False))
+    assert "USE_LOCAL_FALLBACK is off" in r.detail
+
+
+def test_the_gemini_check_does_not_disturb_the_live_fallback_state():
+    brain = _brain(reply={"error": {"status": "RESOURCE_EXHAUSTED"}}, status=429)
+    v.check_gemini(brain)
+    assert brain.status()["gemini"]["state"] == "ready" and brain.switches == 0
+
+
+def test_the_voice_check_understands_macos_dictation():
+    from backend.settings import apply_to_config, load_settings
+    from voice import voice_service_from_config
+    cfg = apply_to_config({"voice": {}}, load_settings({}, {"STT_ENGINE": "macos"}))
+    service = voice_service_from_config(cfg, ROOT)
+    service.synthesizers = [FakeEngine("Piper", wav=make_wav(1.0))]
+    r = v.check_voice(service)
+    assert r.status == v.OK and "macOS Dictation" in r.detail and "by hand" in r.detail
+    service.synthesizers = [FakeEngine("Piper", ok=False)]
+    assert v.check_voice(service).status == v.FAIL
